@@ -2,7 +2,7 @@
 
 namespace Tests;
 
-use Overtrue\LaravelPackage\PackageServiceProvider;
+use Overtrue\TextGuard\TextGuardServiceProvider;
 
 abstract class TestCase extends \Orchestra\Testbench\TestCase
 {
@@ -14,7 +14,7 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
      */
     protected function getPackageProviders($app)
     {
-        return [PackageServiceProvider::class];
+        return [TextGuardServiceProvider::class];
     }
 
     /**
@@ -31,11 +31,20 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
             'database' => ':memory:',
             'prefix' => '',
         ]);
+
+        // Load text-guard configuration for testing
+        $config = require __DIR__.'/../config/text-guard.php';
+        $app['config']->set('text-guard', $config);
     }
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Load text-guard configuration for testing
+        $config = require __DIR__.'/../config/text-guard.php';
+        $this->app['config']->set('text-guard', $config);
+
         $this->loadMigrationsFrom(__DIR__.'/migrations');
         $this->loadMigrationsFrom(dirname(__DIR__).'/migrations');
     }

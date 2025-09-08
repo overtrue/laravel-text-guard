@@ -1,60 +1,60 @@
 # Laravel TextGuard
 
-A powerful string sanitization and normalization tool for Laravel that can be used as validation rules or standalone utility.
+TextGuard：可作 Rule 也可单用的字符串清洗/规范化工具
 
-[中文文档](README.zh-CN.md) | [English Documentation](README.md)
+[English Documentation](README.md) | [中文文档](README.zh-CN.md)
 
-## Installation
+## 安装
 
 ```bash
 composer require overtrue/laravel-text-guard
 ```
 
-## Publish Configuration
+## 发布配置文件
 
 ```bash
 php artisan vendor:publish --tag=text-guard-config
 ```
 
-## Basic Usage
+## 基本用法
 
-### As a Utility
+### 作为工具使用
 
 ```php
 use Overtrue\TextGuard\TextGuard;
 
-// Use default 'safe' preset
+// 使用默认 'safe' 预设
 $clean = TextGuard::filter($dirty);
 
-// Use specified preset
+// 使用指定预设
 $clean = TextGuard::filter($dirty, 'username');
 
-// Override configuration
+// 覆盖配置
 $clean = TextGuard::filter($dirty, 'safe', [
     'truncate_length' => ['max' => 100]
 ]);
 ```
 
-### As Validation Rules
+### 作为验证规则使用
 
 ```php
 use Overtrue\TextGuard\Rules\Filtered;
 use Overtrue\TextGuard\Rules\Sanitized;
 
-// Filter then validate
+// 先过滤再验证
 $validator = validator($data, [
     'nickname' => [new Filtered('username')]
 ]);
 
-// Validate visibility only
+// 仅验证可见度
 $validator = validator($data, [
     'content' => [new Sanitized(0.8, 1)]
 ]);
 ```
 
-### Model Auto-Filtering
+### 模型自动过滤
 
-Use the `TextGuardable` trait to provide automatic filtering for model fields:
+使用 `TextGuardable` trait 为模型字段提供自动过滤功能：
 
 ```php
 use Illuminate\Database\Eloquent\Model;
@@ -66,65 +66,65 @@ class User extends Model
 
     protected $fillable = ['name', 'bio', 'description'];
 
-    // Method 1: Associative array (specify different presets)
+    // 方式1：关联数组（指定不同预设）
     protected $textGuardFields = [
-        'name' => 'username',        // Username uses stricter filtering
-        'bio' => 'safe',             // Bio uses safe filtering
-        'description' => 'rich_text' // Description allows rich text
+        'name' => 'username',        // 用户名使用更严格的过滤
+        'bio' => 'safe',             // 简介使用安全过滤
+        'description' => 'rich_text' // 描述允许富文本
     ];
 
-    // Method 2: Indexed array (use default preset)
+    // 方式2：索引数组（使用默认预设）
     protected $textGuardFields = ['name', 'bio', 'description'];
     protected $textGuardDefaultPreset = 'safe';
 
-    // Method 3: Mixed configuration (some fields use default, some specify preset)
+    // 方式3：混合配置（部分字段使用默认预设，部分指定预设）
     protected $textGuardFields = [
-        'name',  // Use default preset
-        'bio' => 'safe',  // Specify preset
-        'description' => 'rich_text'  // Specify preset
+        'name',  // 使用默认预设
+        'bio' => 'safe',  // 指定预设
+        'description' => 'rich_text'  // 指定预设
     ];
     protected $textGuardDefaultPreset = 'username';
 }
 ```
 
-When the model is saved, specified fields are automatically filtered:
+当模型保存时，指定的字段会自动进行过滤：
 
 ```php
 $user = new User();
 $user->fill([
-    'name' => 'ＵｓｅｒＮａｍｅ１２３！！！',  // Full-width characters
-    'bio' => 'Normal text' . json_decode('"\u200B"') . 'hidden content',  // Zero-width characters
-    'description' => '<script>alert("XSS")</script><p>Normal content</p>',  // HTML
+    'name' => 'ＵｓｅｒＮａｍｅ１２３！！！',  // 全角字符
+    'bio' => '正常文本' . json_decode('"\u200B"') . '隐藏内容',  // 零宽字符
+    'description' => '<script>alert("XSS")</script><p>正常内容</p>',  // HTML
 ]);
 $user->save();
 
-// After saving, data has been automatically filtered:
-// $user->name = 'UserName123!!!'  // Full-width to half-width
-// $user->bio = 'Normal texthidden content'  // Zero-width characters removed
-// $user->description = '<p>Normal content</p>'  // Dangerous tags removed, safe tags preserved
+// 保存后数据已被自动过滤：
+// $user->name = 'UserName123!!!'  // 全角转半角
+// $user->bio = '正常文本隐藏内容'  // 零宽字符被移除
+// $user->description = '<p>正常内容</p>'  // 危险标签被移除，保留安全标签
 ```
 
-#### Dynamic Field Management
+#### 动态管理过滤字段
 
 ```php
 $user = new User();
 
-// Add filtering fields
+// 添加过滤字段
 $user->addTextGuardField('nickname', 'username');
 $user->addTextGuardField('signature', 'safe');
 
-// Remove filtering fields
+// 移除过滤字段
 $user->removeTextGuardField('signature');
 
-// Manually filter fields
+// 手动过滤字段
 $filtered = $user->filterField('bio', 'safe');
 
-// Get current configuration
-$config = $user->getTextGuardFieldsConfig(); // Returns filtering field configuration
-$fields = $user->getTextGuardFields(); // Returns field list
+// 获取当前配置
+$config = $user->getTextGuardFieldsConfig(); // 返回过滤字段配置
+$fields = $user->getTextGuardFields(); // 返回字段列表
 ```
 
-### FormRequest Integration
+### 与 FormRequest 集成
 
 ```php
 class UpdateProfileRequest extends FormRequest
@@ -151,55 +151,55 @@ class UpdateProfileRequest extends FormRequest
 }
 ```
 
-## Preset Configurations
+## 预设配置
 
-### Level-based Presets
+### 级别性预设
 
-#### `safe` Preset
-Default preset suitable for most normal text input fields. Includes basic text sanitization features.
+#### `safe` 预设
+默认预设，适合大多数普通文本输入框。包含基本的文本清洗功能。
 
-#### `strict` Preset
-More restrictive filtering mode with stricter rules:
-- No emoji characters allowed
-- Converts all punctuation to half-width
-- Higher visible character ratio requirement (0.8)
-- Shorter text length limit (5000)
+#### `strict` 预设
+更严格的过滤模式：
+- 不允许 emoji 字符
+- 转换所有标点为半角
+- 更高的可见字符比例要求 (0.8)
+- 较短的文本长度限制 (5000)
 
-### Function-specific Presets (Examples)
+### 功能特定预设（示例）
 
-#### `username` Preset
-Suitable for username input with stricter normalization.
+#### `username` 预设
+适合用户名输入，更严格的规范化。
 
-#### `nickname` Preset
-Suitable for user nicknames with emoji and Chinese punctuation support.
+#### `nickname` 预设
+适合用户昵称，支持 emoji 和中文标点符号。
 
-#### `rich_text` Preset
-Suitable for rich text content, preserving safe HTML tags.
+#### `rich_text` 预设
+适合富文本内容，保留安全的 HTML 标签。
 
-## Extended Features
+## 扩展功能
 
-### Register Custom Pipeline Steps
+### 注册自定义管道步骤
 
 ```php
 use Overtrue\TextGuard\TextGuard;
 
-// Register custom step
+// 注册自定义步骤
 TextGuard::registerPipelineStep('custom_step', YourCustomPipeline::class);
 
-// Use in preset
+// 在预设中使用
 $clean = TextGuard::filter($dirty, 'custom', [
     'custom_step' => ['option' => 'value']
 ]);
 ```
 
-### Get Available Steps
+### 获取可用步骤
 
 ```php
 $availableSteps = TextGuard::getAvailableSteps();
-// Returns: ['trim_whitespace', 'collapse_spaces', 'remove_control_chars', ...]
+// 返回: ['trim_whitespace', 'collapse_spaces', 'remove_control_chars', ...]
 ```
 
-### Create Custom Pipeline Steps
+### 创建自定义管道步骤
 
 ```php
 use Overtrue\TextGuard\Pipeline\PipelineStep;
@@ -210,54 +210,54 @@ class CustomStep implements PipelineStep
 
     public function __invoke(string $text): string
     {
-        // Your custom logic
+        // 你的自定义逻辑
         return $text;
     }
 }
 ```
 
-### Constructor Configuration
+### 构造函数配置
 
-All Pipeline steps now use constructor configuration, following traditional OOP design:
+现在所有 Pipeline 步骤都使用构造函数进行配置，更符合传统的 OOP 设计：
 
 ```php
 // config/text-guard.php
 return [
     'pipeline_map' => [
-        // Simplified syntax: use class names directly
+        // 简化语法：直接使用类名
         'trim_whitespace' => \Overtrue\TextGuard\Pipeline\TrimWhitespace::class,
         'strip_html' => \Overtrue\TextGuard\Pipeline\StripHtml::class,
     ],
 
     'presets' => [
         'safe' => [
-            // Boolean configuration: enable feature
+            // 布尔值配置：启用功能
             'trim_whitespace' => true,
 
-            // String configuration: pass to constructor
+            // 字符串配置：传递给构造函数
             'unicode_normalization' => 'NFKC',
 
-            // Array configuration: pass to constructor
+            // 数组配置：传递给构造函数
             'truncate_length' => ['max' => 100],
         ],
     ],
 ];
 ```
 
-### Configuration Passing Mechanism
+### 配置传递机制
 
-The system automatically passes configuration to constructors based on type:
+系统会根据配置类型自动传递给构造函数：
 
-- `true` → No parameter constructor `new Class()`
-- `'NFKC'` → Single parameter constructor `new Class('NFKC')`
-- `['max' => 100]` → Array parameter constructor `new Class(['max' => 100])`
+- `true` → 无参数构造函数 `new Class()`
+- `'NFKC'` → 单参数构造函数 `new Class('NFKC')`
+- `['max' => 100]` → 数组参数构造函数 `new Class(['max' => 100])`
 
-## Real-world Usage Scenarios
+## 实际使用场景
 
-### User Registration Form
+### 用户注册表单
 
 ```php
-// Clean nickname during user registration
+// 用户注册时清理昵称
 class RegisterRequest extends FormRequest
 {
     protected function prepareForValidation(): void
@@ -281,15 +281,15 @@ class RegisterRequest extends FormRequest
     }
 }
 
-// Processing result:
-// Input: "  ＵｓｅｒＮａｍｅ１２３！！！  "
-// Output: "UserName123!!"
+// 处理结果：
+// 输入: "  ＵｓｅｒＮａｍｅ１２３！！！  "
+// 输出: "UserName123!!"
 ```
 
-### Article Content Management
+### 文章内容管理
 
 ```php
-// Clean content when publishing articles
+// 文章发布时清理内容
 class ArticleRequest extends FormRequest
 {
     protected function prepareForValidation(): void
@@ -313,15 +313,15 @@ class ArticleRequest extends FormRequest
     }
 }
 
-// Processing result:
-// Input: "<p>Hello <script>alert('xss')</script> World</p>"
-// Output: "<p>Hello  World</p>"
+// 处理结果：
+// 输入: "<p>Hello <script>alert('xss')</script> World</p>"
+// 输出: "<p>Hello  World</p>"
 ```
 
-### Comment System
+### 评论系统
 
 ```php
-// Clean content when submitting comments
+// 评论提交时清理内容
 class CommentRequest extends FormRequest
 {
     protected function prepareForValidation(): void
@@ -344,15 +344,15 @@ class CommentRequest extends FormRequest
     }
 }
 
-// Processing result:
-// Input: "  Great article!!!👍👍👍   "
-// Output: "Great article!!👍👍👍"
+// 处理结果：
+// 输入: "  好文章！！！👍👍👍   "
+// 输出: "好文章！！👍👍👍"
 ```
 
-### Search Keyword Processing
+### 搜索关键词处理
 
 ```php
-// Clean keywords during search
+// 搜索时清理关键词
 class SearchController extends Controller
 {
     public function search(Request $request)
@@ -360,7 +360,7 @@ class SearchController extends Controller
         $keyword = TextGuard::filter($request->input('q', ''), 'safe');
 
         if (empty($keyword)) {
-            return redirect()->back()->with('error', 'Please enter a valid search term');
+            return redirect()->back()->with('error', '请输入有效的搜索词');
         }
 
         $results = $this->searchService->search($keyword);
@@ -369,15 +369,15 @@ class SearchController extends Controller
     }
 }
 
-// Processing result:
-// Input: "  Laravel Framework  "
-// Output: "Laravel Framework"
+// 处理结果：
+// 输入: "  Laravel 框架  "
+// 输出: "Laravel 框架"
 ```
 
-### Batch Data Processing
+### 批量数据处理
 
 ```php
-// Clean user data during batch import
+// 批量导入用户数据时清理
 class UserImportService
 {
     public function importUsers(array $users): void
@@ -395,10 +395,10 @@ class UserImportService
 }
 ```
 
-### Custom Pipeline Steps
+### 自定义管道步骤
 
 ```php
-// Create custom sensitive word filtering step
+// 创建自定义的敏感词过滤步骤
 class SensitiveWordFilter implements PipelineStep
 {
     public function __construct(protected array $sensitiveWords = []) {}
@@ -413,7 +413,7 @@ class SensitiveWordFilter implements PipelineStep
     }
 }
 
-// Register and use
+// 注册并使用
 TextGuard::registerPipelineStep('sensitive_filter', SensitiveWordFilter::class);
 
 $clean = TextGuard::filter($dirty, 'custom', [
@@ -421,42 +421,42 @@ $clean = TextGuard::filter($dirty, 'custom', [
 ]);
 ```
 
-## Features
+## 功能特性
 
-- Whitespace handling (trim, collapse spaces)
-- Control character removal
-- Zero-width character removal
-- Unicode normalization
-- Full-width to half-width conversion
-- Punctuation normalization
-- HTML tag processing
-- Repeated punctuation collapsing
-- Visibility checking
-- Length truncation
-- Extensible pipeline architecture
-- Runtime custom step registration
-- Emoji support
-- Chinese punctuation support
-- Character whitelist filtering
+- 空白字符处理（trim、折叠空格）
+- 控制字符移除
+- 零宽字符移除
+- Unicode 规范化
+- 全角半角转换
+- 标点符号规范化
+- HTML 标签处理
+- 重复标点折叠
+- 可见度检查
+- 长度截断
+- 可扩展的管道架构
+- 运行时注册自定义步骤
+- Emoji 支持
+- 中文标点符号支持
+- 字符白名单过滤
 
-## Testing
+## 测试
 
 ```bash
 composer test
 ```
 
-## Code Quality
+## 代码质量
 
-This project follows strict code quality standards:
+本项目遵循严格的代码质量标准：
 
 ```bash
-# Format code
+# 格式化代码
 composer fix
 
-# Run tests
+# 运行测试
 composer test
 ```
 
-## License
+## 许可证
 
 MIT License
