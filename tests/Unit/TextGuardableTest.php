@@ -254,4 +254,147 @@ class TextGuardableTest extends TestCase
         // Safe preset should remove zero-width characters
         $this->assertEquals('正常文本隐藏内容', $user->bio);
     }
+
+    public function test_property_based_configuration()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio'];
+
+            protected $textGuardFields = [
+                'name' => 'username',
+                'bio' => 'safe',
+            ];
+
+            protected $textGuardDefaultPreset = 'safe';
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        $user->fill([
+            'name' => 'ＵｓｅｒＮａｍｅ１２３',
+            'bio' => '  Test Bio  ',
+        ]);
+
+        $user->test_filter_text_guard_fields();
+
+        // Username preset should convert fullwidth to halfwidth
+        $this->assertEquals('UserName123', $user->name);
+
+        // Safe preset should trim whitespace
+        $this->assertEquals('Test Bio', $user->bio);
+    }
+
+    public function test_property_based_list_configuration()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio', 'description'];
+
+            protected $textGuardFields = ['name', 'bio', 'description'];
+
+            protected $textGuardDefaultPreset = 'safe';
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        $user->fill([
+            'name' => '  Test Name  ',
+            'bio' => '  Test Bio  ',
+            'description' => '  Test Description  ',
+        ]);
+
+        $user->test_filter_text_guard_fields();
+
+        // All fields should use the default 'safe' preset
+        $this->assertEquals('Test Name', $user->name);
+        $this->assertEquals('Test Bio', $user->bio);
+        $this->assertEquals('Test Description', $user->description);
+    }
+
+    public function test_property_based_mixed_configuration()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio', 'description'];
+
+            protected $textGuardFields = [
+                'name',  // use default preset
+                'bio' => 'safe',  // specify preset
+                'description' => 'rich_text',  // specify preset
+            ];
+
+            protected $textGuardDefaultPreset = 'username';
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        $user->fill([
+            'name' => 'ＵｓｅｒＮａｍｅ１２３',  // should use 'username' preset
+            'bio' => '  Test Bio  ',  // should use 'safe' preset
+            'description' => '<script>alert("test")</script><p>Valid content</p>',  // should use 'rich_text' preset
+        ]);
+
+        $user->test_filter_text_guard_fields();
+
+        // Name should use default 'username' preset (convert fullwidth to halfwidth)
+        $this->assertEquals('UserName123', $user->name);
+
+        // Bio should use 'safe' preset (trim whitespace)
+        $this->assertEquals('Test Bio', $user->bio);
+
+        // Description should use 'rich_text' preset (strip script tags but keep valid HTML)
+        $this->assertStringNotContainsString('<script>', $user->description);
+        $this->assertStringContainsString('<p>Valid content</p>', $user->description);
+    }
+
+    public function test_property_based_dynamic_field_management()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio'];
+
+            protected $textGuardFields = ['name' => 'safe'];
+
+            protected $textGuardDefaultPreset = 'safe';
+        };
+
+        // Test initial configuration
+        $this->assertEquals(['name' => 'safe'], $user->getTextGuardFields());
+
+        // Add fields dynamically
+        $user->addTextGuardField('bio', 'username')
+            ->addTextGuardField('description', 'rich_text');
+
+        $this->assertEquals([
+            'name' => 'safe',
+            'bio' => 'username',
+            'description' => 'rich_text',
+        ], $user->getTextGuardFields());
+
+        // Remove a field
+        $user->removeTextGuardField('description');
+
+        $this->assertEquals([
+            'name' => 'safe',
+            'bio' => 'username',
+        ], $user->getTextGuardFields());
+    }
 }

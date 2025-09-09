@@ -97,7 +97,7 @@ trait TextGuardable
     public function filterTextGuardFields(): void
     {
         $fields = $this->getTextGuardFields();
-        if (empty($fields) || static::isTextGuardDisabled()) {
+        if (empty($fields) || \Overtrue\TextGuard\TextGuardable::isTextGuardDisabled()) {
             return;
         }
 

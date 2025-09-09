@@ -234,4 +234,112 @@ class TextGuardableGlobalDisableTest extends TestCase
         $this->assertEquals('  Test Name  ', $user1->name);
         $this->assertEquals('  Test Bio  ', $user2->bio);
     }
+
+    public function test_property_based_global_disable()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio'];
+
+            protected $textGuardFields = [
+                'name' => 'safe',
+                'bio' => 'safe',
+            ];
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        // 全局禁用
+        TextGuardable::disableTextGuard();
+
+        $user->name = '  Test Name  ';
+        $user->bio = '  Test Bio  ';
+
+        $user->test_filter_text_guard_fields();
+
+        // 全局禁用后应该不进行过滤
+        $this->assertEquals('  Test Name  ', $user->name);
+        $this->assertEquals('  Test Bio  ', $user->bio);
+
+        // 恢复全局状态
+        TextGuardable::enableTextGuard();
+    }
+
+    public function test_property_based_global_enable()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name'];
+
+            protected $textGuardFields = ['name' => 'safe'];
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        // 先全局禁用
+        TextGuardable::disableTextGuard();
+        $this->assertTrue(TextGuardable::isTextGuardDisabled());
+
+        // 再全局启用
+        TextGuardable::enableTextGuard();
+        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+
+        $user->name = '  Test Name  ';
+        $user->test_filter_text_guard_fields();
+
+        // 全局启用后应该进行过滤
+        $this->assertEquals('Test Name', $user->name);
+    }
+
+    public function test_property_based_mixed_configuration_global_disable()
+    {
+        $user = new class extends User
+        {
+            use \Overtrue\TextGuard\TextGuardable;
+
+            protected $fillable = ['name', 'bio', 'description'];
+
+            protected $textGuardFields = [
+                'name',  // use default preset
+                'bio' => 'safe',  // specify preset
+                'description' => 'rich_text',  // specify preset
+            ];
+
+            protected $textGuardDefaultPreset = 'username';
+
+            public function test_filter_text_guard_fields()
+            {
+                $this->filterTextGuardFields();
+            }
+        };
+
+        // 全局禁用
+        TextGuardable::disableTextGuard();
+
+        $user->fill([
+            'name' => 'ＵｓｅｒＮａｍｅ１２３',
+            'bio' => '  Test Bio  ',
+            'description' => '<script>alert("test")</script><p>Valid content</p>',
+        ]);
+
+        $user->test_filter_text_guard_fields();
+
+        // 全局禁用后应该不进行任何过滤
+        $this->assertEquals('ＵｓｅｒＮａｍｅ１２３', $user->name);
+        $this->assertEquals('  Test Bio  ', $user->bio);
+        $this->assertEquals('<script>alert("test")</script><p>Valid content</p>', $user->description);
+
+        // 恢复全局状态
+        TextGuardable::enableTextGuard();
+    }
 }
