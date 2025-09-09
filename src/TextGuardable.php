@@ -41,6 +41,11 @@ use Illuminate\Database\Eloquent\Model;
 trait TextGuardable
 {
     /**
+     * Global flag to disable text guard processing
+     */
+    private static bool $textGuardDisabled = false;
+
+    /**
      * The fields that should be automatically filtered and their presets
      * Format: ['field_name' => 'preset_name', ...] or ['field_name', ...]
      *
@@ -68,9 +73,9 @@ trait TextGuardable
     /**
      * Filter the specified text guard fields
      */
-    protected function filterTextGuardFields(): void
+    public function filterTextGuardFields(): void
     {
-        if (empty($this->textGuardFields) || self::isTextGuardDisabled()) {
+        if (empty($this->textGuardFields) || \Overtrue\TextGuard\TextGuardable::isTextGuardDisabled()) {
             return;
         }
 
@@ -215,7 +220,7 @@ trait TextGuardable
      */
     public static function disableTextGuard(): void
     {
-        $GLOBALS['text_guard_disabled'] = true;
+        self::$textGuardDisabled = true;
     }
 
     /**
@@ -223,7 +228,7 @@ trait TextGuardable
      */
     public static function enableTextGuard(): void
     {
-        $GLOBALS['text_guard_disabled'] = false;
+        self::$textGuardDisabled = false;
     }
 
     /**
@@ -231,7 +236,7 @@ trait TextGuardable
      */
     public static function isTextGuardDisabled(): bool
     {
-        return $GLOBALS['text_guard_disabled'] ?? false;
+        return self::$textGuardDisabled;
     }
 
     /**

@@ -18,10 +18,15 @@ class TextGuardableGlobalDisableTest extends TestCase
 
     public function test_global_disable_text_guard()
     {
-        // 创建一个具体的测试类
-        $testUser = new class extends User
+        // 全局禁用 TextGuard
+        TextGuardable::disableTextGuard();
+
+        $this->assertTrue(TextGuardable::isTextGuardDisabled());
+
+        // 使用具体的测试类
+        $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -37,17 +42,9 @@ class TextGuardableGlobalDisableTest extends TestCase
             }
         };
 
-        $user = new $testUser;
-
-        // 全局禁用 TextGuard
-        TextGuardable::disableTextGuard();
-
-        $this->assertTrue(TextGuardable::isTextGuardDisabled());
-
-        $user->fill([
-            'name' => '  Test Name  ',
-            'bio' => '  Test Bio  ',
-        ]);
+        // 直接设置属性，避免触发 saving 事件
+        $user->name = '  Test Name  ';
+        $user->bio = '  Test Bio  ';
 
         $user->test_filter_text_guard_fields();
 
