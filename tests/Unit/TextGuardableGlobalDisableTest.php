@@ -30,10 +30,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name', 'bio'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe', 'bio' => 'safe'];
+                return ['name' => 'safe', 'bio' => 'safe'];
             }
 
             public function test_filter_text_guard_fields()
@@ -61,10 +60,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe'];
+                return ['name' => 'safe'];
             }
 
             public function test_filter_text_guard_fields()
@@ -96,10 +94,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name', 'bio'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe', 'bio' => 'safe'];
+                return ['name' => 'safe', 'bio' => 'safe'];
             }
 
             public function test_filter_text_guard_fields()
@@ -137,10 +134,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe'];
+                return ['name' => 'safe'];
             }
 
             public function test_filter_text_guard_fields()
@@ -167,10 +163,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe'];
+                return ['name' => 'safe'];
             }
         };
 
@@ -197,10 +192,9 @@ class TextGuardableGlobalDisableTest extends TestCase
 
             protected $fillable = ['name'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name' => 'safe'];
+                return ['name' => 'safe'];
             }
 
             public function test_filter_text_guard_fields()
