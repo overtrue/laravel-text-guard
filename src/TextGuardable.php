@@ -69,7 +69,13 @@ trait TextGuardable
      */
     public function getTextGuardFields(): array
     {
-        return $this->textGuardFields ?? [];
+        // If textGuardFields property is set, use it (for dynamic modifications)
+        if (isset($this->textGuardFields)) {
+            return $this->textGuardFields;
+        }
+
+        // Otherwise, return empty array (method-based configuration should override this)
+        return [];
     }
 
     /**
@@ -78,7 +84,7 @@ trait TextGuardable
      */
     public function getTextGuardDefaultPreset(): string
     {
-        return $this->textGuardDefaultPreset ?? 'safe';
+        return $this->textGuardDefaultPreset ?? config('text-guard.preset', 'safe');
     }
 
     /**
@@ -170,7 +176,7 @@ trait TextGuardable
      */
     public function filterField(string $field, ?string $preset = null): string
     {
-        $preset = $preset ?? $this->textGuardDefaultPreset;
+        $preset = $preset ?? $this->getTextGuardDefaultPreset();
         $value = $this->getAttribute($field);
 
         if (is_null($value)) {
@@ -186,56 +192,6 @@ trait TextGuardable
     public function getTextGuardFieldNames(): array
     {
         return array_keys($this->normalizeTextGuardFields());
-    }
-
-    /**
-     * Get the text guard fields configuration
-     */
-    public function getTextGuardFieldsConfig(): array
-    {
-        return $this->getTextGuardFields();
-    }
-
-    /**
-     * Add a field to be automatically filtered
-     *
-     * @return $this
-     */
-    public function addTextGuardField(string $field, ?string $preset = null): self
-    {
-        if (! isset($this->textGuardFields)) {
-            $this->textGuardFields = [];
-        }
-        $this->textGuardFields[$field] = $preset ?? $this->getTextGuardDefaultPreset();
-
-        return $this;
-    }
-
-    /**
-     * Remove a field from automatic filtering
-     *
-     * @return $this
-     */
-    public function removeTextGuardField(string $field): self
-    {
-        if (! isset($this->textGuardFields)) {
-            return $this;
-        }
-
-        // If it's an indexed array format, directly remove the element
-        if (array_is_list($this->textGuardFields)) {
-            $this->textGuardFields = array_values(array_filter($this->textGuardFields, fn ($f) => $f !== $field));
-        } else {
-            // Handle mixed format: first check if it exists as a key
-            if (isset($this->textGuardFields[$field])) {
-                unset($this->textGuardFields[$field]);
-            } else {
-                // If it exists as a value (in the indexed array part), remove it
-                $this->textGuardFields = array_filter($this->textGuardFields, fn ($value, $key) => ! (is_numeric($key) && $value === $field), ARRAY_FILTER_USE_BOTH);
-            }
-        }
-
-        return $this;
     }
 
     /**

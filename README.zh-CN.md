@@ -109,18 +109,12 @@ $user->save();
 ```php
 $user = new User();
 
-// 添加过滤字段
-$user->addTextGuardField('nickname', 'username');
-$user->addTextGuardField('signature', 'safe');
-
-// 移除过滤字段
-$user->removeTextGuardField('signature');
 
 // 手动过滤字段
 $filtered = $user->filterField('bio', 'safe');
 
 // 获取当前配置
-$config = $user->getTextGuardFieldsConfig(); // 返回过滤字段配置
+$fields = $user->getTextGuardFields(); // 返回过滤字段配置
 $fields = $user->getTextGuardFields(); // 返回字段列表
 ```
 

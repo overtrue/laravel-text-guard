@@ -106,29 +106,6 @@ class TextGuardableTest extends TestCase
         $this->assertEquals('  Test Name  ', $user->name);
     }
 
-    public function test_add_and_remove_text_guard_fields()
-    {
-        $user = new class extends User
-        {
-            use \Overtrue\TextGuard\TextGuardable;
-
-            protected $fillable = ['name', 'bio'];
-        };
-
-        // Add fields
-        $user->addTextGuardField('name', 'username')
-            ->addTextGuardField('bio', 'safe');
-
-        $this->assertEquals(['name' => 'username', 'bio' => 'safe'], $user->getTextGuardFields());
-        $this->assertEquals(['name' => 'username', 'bio' => 'safe'], $user->getTextGuardFieldsConfig());
-
-        // Remove a field
-        $user->removeTextGuardField('bio');
-
-        $this->assertEquals(['name' => 'username'], $user->getTextGuardFields());
-        $this->assertEquals(['name' => 'username'], $user->getTextGuardFieldsConfig());
-    }
-
     public function test_only_filters_dirty_fields()
     {
         $user = new class extends User
@@ -361,40 +338,5 @@ class TextGuardableTest extends TestCase
         // Description should use 'rich_text' preset (strip script tags but keep valid HTML)
         $this->assertStringNotContainsString('<script>', $user->description);
         $this->assertStringContainsString('<p>Valid content</p>', $user->description);
-    }
-
-    public function test_property_based_dynamic_field_management()
-    {
-        $user = new class extends User
-        {
-            use \Overtrue\TextGuard\TextGuardable;
-
-            protected $fillable = ['name', 'bio'];
-
-            protected $textGuardFields = ['name' => 'safe'];
-
-            protected $textGuardDefaultPreset = 'safe';
-        };
-
-        // Test initial configuration
-        $this->assertEquals(['name' => 'safe'], $user->getTextGuardFields());
-
-        // Add fields dynamically
-        $user->addTextGuardField('bio', 'username')
-            ->addTextGuardField('description', 'rich_text');
-
-        $this->assertEquals([
-            'name' => 'safe',
-            'bio' => 'username',
-            'description' => 'rich_text',
-        ], $user->getTextGuardFields());
-
-        // Remove a field
-        $user->removeTextGuardField('description');
-
-        $this->assertEquals([
-            'name' => 'safe',
-            'bio' => 'username',
-        ], $user->getTextGuardFields());
     }
 }

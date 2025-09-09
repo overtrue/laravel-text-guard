@@ -21,10 +21,9 @@ class ModelAutoFilterTest extends TestCase
 
             protected $table = 'users';
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = [
+                return [
                     'name' => 'username',
                     'bio' => 'safe',
                 ];
@@ -62,10 +61,9 @@ class ModelAutoFilterTest extends TestCase
 
             protected $table = 'users';
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = [
+                return [
                     'name' => 'username',
                     'bio' => 'safe',
                 ];
@@ -108,10 +106,9 @@ class ModelAutoFilterTest extends TestCase
 
             protected $table = 'users';
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = [
+                return [
                     'name' => 'username',
                     'description' => 'rich_text',
                 ];
@@ -144,10 +141,9 @@ class ModelAutoFilterTest extends TestCase
 
             protected $table = 'users';
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = [
+                return [
                     'name' => 'username',
                     'bio' => 'safe',
                 ];
@@ -181,10 +177,9 @@ class ModelAutoFilterTest extends TestCase
 
             protected $table = 'users';
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name', 'bio'];
+                return ['name', 'bio'];
             }
         };
 

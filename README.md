@@ -109,18 +109,12 @@ $user->save();
 ```php
 $user = new User();
 
-// Add filtering fields
-$user->addTextGuardField('nickname', 'username');
-$user->addTextGuardField('signature', 'safe');
-
-// Remove filtering fields
-$user->removeTextGuardField('signature');
 
 // Manually filter fields
 $filtered = $user->filterField('bio', 'safe');
 
 // Get current configuration
-$config = $user->getTextGuardFieldsConfig(); // Returns filtering field configuration
+$fields = $user->getTextGuardFields(); // Returns filtering field configuration
 $fields = $user->getTextGuardFields(); // Returns field list
 ```
 

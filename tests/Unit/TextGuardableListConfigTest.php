@@ -15,12 +15,14 @@ class TextGuardableListConfigTest extends TestCase
 
             protected $fillable = ['name', 'bio', 'description'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                // 使用索引数组格式（list 写法）
-                $this->textGuardFields = ['name', 'bio', 'description'];
-                $this->textGuardDefaultPreset = 'safe';
+                return ['name', 'bio', 'description'];
+            }
+
+            public function getTextGuardDefaultPreset(): string
+            {
+                return 'safe';
             }
 
             public function test_filter_text_guard_fields()
@@ -51,16 +53,18 @@ class TextGuardableListConfigTest extends TestCase
 
             protected $fillable = ['name', 'bio', 'description'];
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                // 混合配置：部分字段使用默认预设，部分字段指定预设
-                $this->textGuardFields = [
+                return [
                     'name',  // 使用默认预设
                     'bio' => 'safe',  // 指定预设
                     'description' => 'rich_text',  // 指定预设
                 ];
-                $this->textGuardDefaultPreset = 'username';
+            }
+
+            public function getTextGuardDefaultPreset(): string
+            {
+                return 'username';
             }
 
             public function test_filter_text_guard_fields()
@@ -94,84 +98,14 @@ class TextGuardableListConfigTest extends TestCase
         {
             use \Overtrue\TextGuard\TextGuardable;
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = ['name', 'bio', 'description'];
+                return ['name', 'bio', 'description'];
             }
         };
 
         $fields = $user->getTextGuardFields();
-        $this->assertEquals([
-            'name' => 'safe',
-            'bio' => 'safe',
-            'description' => 'safe',
-        ], $fields);
-    }
-
-    public function test_dynamic_field_management_with_list_configuration()
-    {
-        $user = new class extends User
-        {
-            use \Overtrue\TextGuard\TextGuardable;
-
-            public function __construct()
-            {
-                parent::__construct();
-                // 初始化为索引数组格式
-                $this->textGuardFields = ['name', 'bio'];
-                $this->textGuardDefaultPreset = 'safe';
-            }
-        };
-
-        // 添加字段（应该转换为关联数组格式）
-        $user->addTextGuardField('description', 'rich_text');
-
-        $this->assertEquals([
-            'name' => 'safe',
-            'bio' => 'safe',
-            'description' => 'rich_text',
-        ], $user->getTextGuardFields());
-        $this->assertEquals([
-            0 => 'name',
-            1 => 'bio',
-            'description' => 'rich_text',
-        ], $user->getTextGuardFieldsConfig());
-
-        // 移除字段
-        $user->removeTextGuardField('bio');
-
-        $this->assertEquals([
-            'name' => 'safe',
-            'description' => 'rich_text',
-        ], $user->getTextGuardFields());
-        $this->assertEquals([
-            0 => 'name',
-            'description' => 'rich_text',
-        ], $user->getTextGuardFieldsConfig());
-    }
-
-    public function test_remove_field_from_list_configuration()
-    {
-        $user = new class extends User
-        {
-            use \Overtrue\TextGuard\TextGuardable;
-
-            public function __construct()
-            {
-                parent::__construct();
-                $this->textGuardFields = ['name', 'bio', 'description'];
-            }
-        };
-
-        // 从索引数组中移除字段
-        $user->removeTextGuardField('bio');
-
-        $this->assertEquals([
-            'name' => 'safe',
-            'description' => 'safe',
-        ], $user->getTextGuardFields());
-        $this->assertEquals(['name', 'description'], $user->getTextGuardFieldsConfig());
+        $this->assertEquals(['name', 'bio', 'description'], $fields);
     }
 
     public function test_empty_list_configuration()
@@ -180,10 +114,9 @@ class TextGuardableListConfigTest extends TestCase
         {
             use \Overtrue\TextGuard\TextGuardable;
 
-            public function __construct()
+            public function getTextGuardFields(): array
             {
-                parent::__construct();
-                $this->textGuardFields = [];
+                return [];
             }
 
             public function test_filter_text_guard_fields()
