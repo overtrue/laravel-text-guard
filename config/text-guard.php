@@ -44,18 +44,6 @@ return [
             'collapse_spaces' => true,
             'remove_control_chars' => true,
             'remove_zero_width' => true,
-            'unicode_normalization' => 'NFKC', // null/NFC/NFKC
-            'fullwidth_to_halfwidth' => [
-                'ascii' => true,
-                'digits' => true,
-                'latin' => true,
-                'punct' => false, // Chinese environment often preserves Chinese punctuation
-            ],
-            'normalize_punctuations' => 'zh', // null/'en'/'zh'
-            'collapse_repeated_marks' => [
-                'max_repeat' => 2, // Allow maximum 2 consecutive repetitions
-                'charset' => '!?。，、…—',
-            ],
             'strip_html' => true,
             'visible_ratio_guard' => [
                 'min_ratio' => 0.6, // Visible character ratio

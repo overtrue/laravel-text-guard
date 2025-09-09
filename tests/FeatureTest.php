@@ -64,10 +64,11 @@ class FeatureTest extends TestCase
         $cleanText = TextGuard::filter($confusingText, 'username');
         $this->assertEquals('User123abc', $cleanText);
 
-        // 测试中文标点符号攻击
+        // 测试中文标点符号攻击 - safe 预设不再折叠重复标点符号
         $punctuationAttack = '测试！！！，，，。。。？？？';
         $cleanText = TextGuard::filter($punctuationAttack, 'safe');
-        $this->assertStringNotContainsString('！！！', $cleanText);
+        // safe 预设移除了 collapse_repeated_marks，所以重复标点符号会保留
+        $this->assertStringContainsString('测试', $cleanText);
     }
 
     public function test_chinese_html_injection_attack()
@@ -98,7 +99,7 @@ class FeatureTest extends TestCase
         $cleanText = TextGuard::filter($text, 'safe');
 
         $this->assertStringContainsString('Hello World!', $cleanText);
-        $this->assertStringContainsString('你好世界!', $cleanText); // Full-width exclamation converted to half-width
+        $this->assertStringContainsString('你好世界！', $cleanText); // safe 预设不再转换全角半角，保持原样
         $this->assertStringContainsString('😀', $cleanText);
         $this->assertStringContainsString('🎉', $cleanText);
     }
