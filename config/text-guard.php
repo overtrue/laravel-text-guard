@@ -1,10 +1,21 @@
 <?php
 
+/**
+ * Laravel TextGuard Configuration
+ *
+ * For detailed pipeline usage and parameters, see:
+ * - Pipeline Guide: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.md
+ * - Pipeline 指南: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.zh-CN.md
+ */
+
 return [
     // Default preset: suitable for most "normal text input fields"
     'preset' => 'safe',
 
     // Preset pipelines (executed in order)
+    // For detailed pipeline usage and parameters, see:
+    // - Pipeline Guide: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.md
+    // - Pipeline 指南: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.zh-CN.md
     'presets' => [
         // Strict mode: more restrictive filtering
         'strict' => [
@@ -126,6 +137,9 @@ return [
     ],
 
     // Pipeline step mapping configuration
+    // For detailed pipeline usage and parameters, see:
+    // - Pipeline Guide: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.md
+    // - Pipeline 指南: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.zh-CN.md
     'pipeline_map' => [
         // No parameter constructor
         'trim_whitespace' => \Overtrue\TextGuard\Pipeline\TrimWhitespace::class,
