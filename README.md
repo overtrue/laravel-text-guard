@@ -4,6 +4,11 @@ A powerful string sanitization and normalization tool for Laravel that can be us
 
 [中文文档](README.zh-CN.md) | [English Documentation](README.md)
 
+## Documentation
+
+- [Pipeline Guide](PIPELINE_GUIDE.md) - Complete guide to all pipeline steps
+- [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md) - 所有 pipeline 步骤的完整指南
+
 ## Installation
 
 ```bash
@@ -144,6 +149,145 @@ class UpdateProfileRequest extends FormRequest
     }
 }
 ```
+
+## Pipeline Usage
+
+Laravel TextGuard provides 14 built-in pipeline steps for text processing. Each pipeline step can be configured with specific parameters to meet different requirements.
+
+### Available Pipeline Steps
+
+#### Basic Text Processing
+- **`trim_whitespace`** - Remove leading/trailing whitespace (including full-width spaces)
+- **`collapse_spaces`** - Collapse multiple consecutive spaces into single space
+- **`remove_control_chars`** - Remove control characters while preserving newlines and tabs
+- **`remove_zero_width`** - Remove zero-width characters (U+200B..200D, U+FEFF)
+
+#### Unicode Processing
+- **`unicode_normalization`** - Unicode normalization (NFC, NFD, NFKC, NFKD)
+- **`fullwidth_to_halfwidth`** - Convert fullwidth characters to halfwidth
+- **`normalize_punctuations`** - Normalize punctuation based on locale (zh/en)
+
+#### HTML Processing
+- **`strip_html`** - Remove all HTML tags
+- **`html_decode`** - Decode HTML entities
+- **`whitelist_html`** - Keep only allowed HTML tags and attributes
+
+#### Character Filtering
+- **`character_whitelist`** - Keep only allowed character types (with emoji support)
+- **`collapse_repeated_marks`** - Limit repeated punctuation marks
+
+#### Length Control
+- **`visible_ratio_guard`** - Check visible character ratio
+- **`truncate_length`** - Truncate text to maximum length
+
+### Pipeline Configuration Examples
+
+#### Basic Text Cleaning
+```php
+'basic_clean' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'strip_html' => true,
+    'visible_ratio_guard' => ['min_ratio' => 0.6],
+    'truncate_length' => ['max' => 1000],
+],
+```
+
+#### Username Processing
+```php
+'username' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFKC',
+    'fullwidth_to_halfwidth' => [
+        'ascii' => true,
+        'digits' => true,
+        'latin' => true,
+        'punct' => true,
+    ],
+    'normalize_punctuations' => 'en',
+    'strip_html' => true,
+    'collapse_repeated_marks' => [
+        'max_repeat' => 1,
+        'charset' => '_-.',
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.9],
+    'truncate_length' => ['max' => 50],
+],
+```
+
+#### Rich Text Processing
+```php
+'rich_text' => [
+    'trim_whitespace' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFC',
+    'whitelist_html' => [
+        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
+        'attrs' => ['href', 'title', 'rel'],
+        'protocols' => ['http', 'https', 'mailto'],
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.5],
+    'truncate_length' => ['max' => 20000],
+],
+```
+
+#### Nickname with Emoji Support
+```php
+'nickname' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFKC',
+    'fullwidth_to_halfwidth' => [
+        'ascii' => true,
+        'digits' => true,
+        'latin' => true,
+        'punct' => false, // Preserve Chinese punctuation
+    ],
+    'html_decode' => true,
+    'strip_html' => true,
+    'character_whitelist' => [
+        'enabled' => true,
+        'allow_emoji' => true,
+        'allow_chinese_punctuation' => true,
+        'allow_english_punctuation' => true,
+        'emoji_ranges' => [
+            'emoticons' => true,
+            'misc_symbols' => true,
+            'transport_map' => true,
+            'misc_symbols_2' => true,
+            'dingbats' => true,
+        ],
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.7],
+    'truncate_length' => ['max' => 30],
+],
+```
+
+### Pipeline Parameter Types
+
+The system automatically passes configuration to constructors based on type:
+
+- **Boolean values** (`true`/`false`) → No parameter constructor: `new Class()`
+- **String values** (`'NFKC'`) → Single parameter constructor: `new Class('NFKC')`
+- **Array values** (`['max' => 100]`) → Array parameter constructor: `new Class(['max' => 100])`
+
+### Usage Tips
+
+1. **Order matters**: Pipeline steps are executed in configuration order
+2. **Basic cleanup first**: Start with `trim_whitespace`, `collapse_spaces`, `remove_control_chars`, `remove_zero_width`
+3. **Unicode processing**: Use `unicode_normalization` and `fullwidth_to_halfwidth` for international text
+4. **HTML handling**: Use `whitelist_html` for rich text, `strip_html` for plain text
+5. **Length control last**: Place `visible_ratio_guard` and `truncate_length` at the end
+
+For detailed parameter information and more examples, see the [Pipeline Guide](PIPELINE_GUIDE.md).
 
 ## Preset Configurations
 

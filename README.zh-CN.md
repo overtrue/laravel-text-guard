@@ -4,6 +4,11 @@ TextGuard：可作 Rule 也可单用的字符串清洗/规范化工具
 
 [English Documentation](README.md) | [中文文档](README.zh-CN.md)
 
+## 文档
+
+- [Pipeline Guide](PIPELINE_GUIDE.md) - Complete guide to all pipeline steps
+- [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md) - 所有 pipeline 步骤的完整指南
+
 ## 安装
 
 ```bash
@@ -144,6 +149,145 @@ class UpdateProfileRequest extends FormRequest
     }
 }
 ```
+
+## Pipeline 使用
+
+Laravel TextGuard 提供了 14 个内置的 pipeline 步骤用于文本处理。每个 pipeline 步骤都可以配置特定参数以满足不同需求。
+
+### 可用的 Pipeline 步骤
+
+#### 基础文本处理
+- **`trim_whitespace`** - 去除首尾空白字符（包括全角空格）
+- **`collapse_spaces`** - 合并多个连续空格为单个空格
+- **`remove_control_chars`** - 移除控制字符（保留换行符和制表符）
+- **`remove_zero_width`** - 移除零宽字符（U+200B..200D, U+FEFF）
+
+#### Unicode 处理
+- **`unicode_normalization`** - Unicode 规范化（NFC, NFD, NFKC, NFKD）
+- **`fullwidth_to_halfwidth`** - 全角字符转半角字符
+- **`normalize_punctuations`** - 根据语言环境规范化标点符号（zh/en）
+
+#### HTML 处理
+- **`strip_html`** - 移除所有 HTML 标签
+- **`html_decode`** - 解码 HTML 实体
+- **`whitelist_html`** - 只保留允许的 HTML 标签和属性
+
+#### 字符过滤
+- **`character_whitelist`** - 只保留允许的字符类型（支持表情符号）
+- **`collapse_repeated_marks`** - 限制重复标点符号
+
+#### 长度控制
+- **`visible_ratio_guard`** - 检查可见字符比例
+- **`truncate_length`** - 截断文本到最大长度
+
+### Pipeline 配置示例
+
+#### 基础文本清理
+```php
+'basic_clean' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'strip_html' => true,
+    'visible_ratio_guard' => ['min_ratio' => 0.6],
+    'truncate_length' => ['max' => 1000],
+],
+```
+
+#### 用户名处理
+```php
+'username' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFKC',
+    'fullwidth_to_halfwidth' => [
+        'ascii' => true,
+        'digits' => true,
+        'latin' => true,
+        'punct' => true,
+    ],
+    'normalize_punctuations' => 'en',
+    'strip_html' => true,
+    'collapse_repeated_marks' => [
+        'max_repeat' => 1,
+        'charset' => '_-.',
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.9],
+    'truncate_length' => ['max' => 50],
+],
+```
+
+#### 富文本处理
+```php
+'rich_text' => [
+    'trim_whitespace' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFC',
+    'whitelist_html' => [
+        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
+        'attrs' => ['href', 'title', 'rel'],
+        'protocols' => ['http', 'https', 'mailto'],
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.5],
+    'truncate_length' => ['max' => 20000],
+],
+```
+
+#### 支持表情符号的昵称
+```php
+'nickname' => [
+    'trim_whitespace' => true,
+    'collapse_spaces' => true,
+    'remove_control_chars' => true,
+    'remove_zero_width' => true,
+    'unicode_normalization' => 'NFKC',
+    'fullwidth_to_halfwidth' => [
+        'ascii' => true,
+        'digits' => true,
+        'latin' => true,
+        'punct' => false, // 保留中文标点
+    ],
+    'html_decode' => true,
+    'strip_html' => true,
+    'character_whitelist' => [
+        'enabled' => true,
+        'allow_emoji' => true,
+        'allow_chinese_punctuation' => true,
+        'allow_english_punctuation' => true,
+        'emoji_ranges' => [
+            'emoticons' => true,
+            'misc_symbols' => true,
+            'transport_map' => true,
+            'misc_symbols_2' => true,
+            'dingbats' => true,
+        ],
+    ],
+    'visible_ratio_guard' => ['min_ratio' => 0.7],
+    'truncate_length' => ['max' => 30],
+],
+```
+
+### Pipeline 参数类型
+
+系统根据类型自动传递配置给构造函数：
+
+- **布尔值** (`true`/`false`) → 无参数构造函数：`new Class()`
+- **字符串值** (`'NFKC'`) → 单参数构造函数：`new Class('NFKC')`
+- **数组值** (`['max' => 100]`) → 数组参数构造函数：`new Class(['max' => 100])`
+
+### 使用技巧
+
+1. **顺序很重要**：Pipeline 步骤按配置顺序执行
+2. **先基础清理**：从 `trim_whitespace`、`collapse_spaces`、`remove_control_chars`、`remove_zero_width` 开始
+3. **Unicode 处理**：对国际化文本使用 `unicode_normalization` 和 `fullwidth_to_halfwidth`
+4. **HTML 处理**：富文本使用 `whitelist_html`，纯文本使用 `strip_html`
+5. **长度控制最后**：将 `visible_ratio_guard` 和 `truncate_length` 放在最后
+
+详细的参数信息和更多示例，请查看 [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md)。
 
 ## 预设配置
 
