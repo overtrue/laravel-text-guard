@@ -28,7 +28,7 @@ class Sanitized implements ValidationRule
         }
 
         // Simple visibility calculation
-        $visible = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}]/u', '', $value);
+        $visible = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}\x{2060}]/u', '', $value) ?? $value;
         if ($len > 0 && (mb_strlen($visible) / $len) < $this->minVisibleRatio) {
             $fail(':attribute is not visible enough (contains too many invisible characters).');
         }

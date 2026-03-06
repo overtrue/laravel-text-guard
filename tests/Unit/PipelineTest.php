@@ -2,9 +2,11 @@
 
 namespace Tests\Unit;
 
+use Overtrue\TextGuard\Pipeline\CharacterWhitelist;
 use Overtrue\TextGuard\Pipeline\CollapseRepeatedMarks;
 use Overtrue\TextGuard\Pipeline\CollapseSpaces;
 use Overtrue\TextGuard\Pipeline\FullwidthToHalfwidth;
+use Overtrue\TextGuard\Pipeline\HtmlDecode;
 use Overtrue\TextGuard\Pipeline\NormalizePunctuations;
 use Overtrue\TextGuard\Pipeline\NormalizeUnicode;
 use Overtrue\TextGuard\Pipeline\RemoveControlChars;
@@ -51,12 +53,29 @@ class PipelineTest extends TestCase
         $this->assertEquals('HelloWorldTest', $result);
     }
 
+    public function test_remove_zero_width_includes_word_joiner()
+    {
+        $filter = new RemoveZeroWidth;
+        $text = "Hello\u{2060}World";
+        $result = $filter($text);
+
+        $this->assertEquals('HelloWorld', $result);
+    }
+
     public function test_normalize_unicode()
     {
         $filter = new NormalizeUnicode('NFKC');
         $result = $filter('café');
 
         $this->assertIsString($result);
+    }
+
+    public function test_normalize_unicode_with_invalid_form_returns_original_text()
+    {
+        $filter = new NormalizeUnicode('INVALID_FORM');
+        $text = 'ｔｅｓｔ';
+
+        $this->assertSame($text, $filter($text));
     }
 
     public function test_fullwidth_to_halfwidth()
@@ -91,6 +110,13 @@ class PipelineTest extends TestCase
         $this->assertEquals('Hello World', $result);
     }
 
+    public function test_html_decode()
+    {
+        $filter = new HtmlDecode;
+
+        $this->assertSame('<p>Hello & 世界</p>', $filter('&lt;p&gt;Hello &amp; &#19990;&#30028;&lt;/p&gt;'));
+    }
+
     public function test_whitelist_html()
     {
         $filter = new WhitelistHtml([
@@ -103,6 +129,23 @@ class PipelineTest extends TestCase
         $this->assertStringContainsString('Hello', $result);
         $this->assertStringContainsString('World', $result);
         $this->assertStringNotContainsString('script', $result);
+    }
+
+    public function test_whitelist_html_removes_unsafe_attributes_and_protocols()
+    {
+        $filter = new WhitelistHtml([
+            'tags' => ['a', 'p'],
+            'attrs' => ['href', 'title'],
+            'protocols' => ['http', 'https'],
+        ]);
+
+        $clean = $filter('<a href="javascript:alert(1)" onclick="alert(2)" title="ok">link</a><p onmouseover="x()">text</p>');
+
+        $this->assertStringNotContainsString('javascript:', $clean);
+        $this->assertStringNotContainsString('onclick', $clean);
+        $this->assertStringNotContainsString('onmouseover', $clean);
+        $this->assertStringContainsString('<a title="ok">link</a>', $clean);
+        $this->assertStringContainsString('<p>text</p>', $clean);
     }
 
     public function test_collapse_repeated_marks()
@@ -163,5 +206,34 @@ class PipelineTest extends TestCase
         $repeatAttack = '测试！！！！！！！！！！！！';
         $result = $repeatFilter($repeatAttack);
         $this->assertEquals('测试！！', $result);
+    }
+
+    public function test_character_whitelist_accepts_partial_emoji_range_overrides()
+    {
+        $filter = new CharacterWhitelist([
+            'emoji_ranges' => [
+                'emoticons' => false,
+            ],
+        ]);
+
+        set_error_handler(static function (int $severity, string $message): never {
+            throw new \ErrorException($message, 0, $severity);
+        });
+
+        try {
+            $clean = $filter('abc😀🎉');
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame('abc🎉', $clean);
+    }
+
+    public function test_trim_whitespace_with_invalid_utf8_returns_original_text()
+    {
+        $filter = new TrimWhitespace;
+        $invalid = "\xFFfoo";
+
+        $this->assertSame($invalid, $filter($invalid));
     }
 }

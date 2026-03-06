@@ -42,11 +42,6 @@ use Illuminate\Database\Eloquent\Model;
  */
 trait TextGuardable
 {
-    /**
-     * Global flag to disable text guard processing
-     */
-    private static bool $textGuardDisabled = false;
-
     // /**
     //  * The fields that should be automatically filtered and their presets
     //  * Format: ['field_name' => 'preset_name', ...] or ['field_name', ...]
@@ -103,7 +98,7 @@ trait TextGuardable
     public function filterTextGuardFields(): void
     {
         $fields = $this->getTextGuardFields();
-        if (empty($fields) || \Overtrue\TextGuard\TextGuardable::isTextGuardDisabled()) {
+        if (empty($fields) || self::isTextGuardDisabled()) {
             return;
         }
 
@@ -158,7 +153,7 @@ trait TextGuardable
                 $fields[$value] = $defaultPreset;
             } else {
                 // This is a key-value pair in the associative array
-                if (is_string($value) && in_array($value, $this->getValidPresets())) {
+                if (is_string($value) && in_array($value, $this->getValidPresets(), true)) {
                     // The value is a valid preset name
                     $fields[$key] = $value;
                 } else {
@@ -199,7 +194,7 @@ trait TextGuardable
      */
     public static function disableTextGuard(): void
     {
-        self::$textGuardDisabled = true;
+        TextGuardState::disable();
     }
 
     /**
@@ -207,7 +202,7 @@ trait TextGuardable
      */
     public static function enableTextGuard(): void
     {
-        self::$textGuardDisabled = false;
+        TextGuardState::enable();
     }
 
     /**
@@ -215,27 +210,14 @@ trait TextGuardable
      */
     public static function isTextGuardDisabled(): bool
     {
-        return self::$textGuardDisabled;
+        return TextGuardState::isDisabled();
     }
 
     /**
      * Execute a callback with text guard temporarily disabled
-     *
-     * @return mixed
      */
-    public static function withoutTextGuard(callable $callback)
+    public static function withoutTextGuard(callable $callback): mixed
     {
-        $wasDisabled = self::isTextGuardDisabled();
-        self::disableTextGuard();
-
-        try {
-            return $callback();
-        } finally {
-            if ($wasDisabled) {
-                self::disableTextGuard();
-            } else {
-                self::enableTextGuard();
-            }
-        }
+        return TextGuardState::without($callback);
     }
 }

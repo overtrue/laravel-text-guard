@@ -21,6 +21,6 @@ class CollapseRepeatedMarks implements PipelineStep
 
         return preg_replace_callback($pattern, function ($matches) use ($maxRepeat) {
             return str_repeat($matches[1], $maxRepeat);
-        }, $text);
+        }, $text) ?? $text;
     }
 }

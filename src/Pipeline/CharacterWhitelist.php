@@ -8,7 +8,7 @@ class CharacterWhitelist implements PipelineStep
 
     public function __invoke(string $text): string
     {
-        $options = array_merge([
+        $defaults = [
             'enabled' => true,
             'allow_emoji' => true,
             'allow_chinese_punctuation' => true,
@@ -20,9 +20,10 @@ class CharacterWhitelist implements PipelineStep
                 'misc_symbols_2' => true,   // [\x{2600}-\x{26FF}]
                 'dingbats' => true,         // [\x{2700}-\x{27BF}]
             ],
-        ], $this->options);
+        ];
+        $options = array_replace_recursive($defaults, $this->options);
 
-        if (! $options['enabled']) {
+        if (! (bool) $options['enabled']) {
             return $text;
         }
 
@@ -33,35 +34,35 @@ class CharacterWhitelist implements PipelineStep
         $blacklistPattern .= '\w\p{Han}\s';
 
         // Add Chinese punctuation if enabled
-        if ($options['allow_chinese_punctuation']) {
-            $chinesePunctuation = preg_quote('。、！？：；﹑•＂…\'\'""〝〞¦‖—　〈〉﹞﹝「」‹›〖〗】【»«』『〕〔》《﹐¸﹕︰﹔！¡？¿﹖﹌﹏﹋＇´ˊˋ―﹫︳︴¯＿￣﹢﹦﹤‐­˜﹟﹩﹠﹪﹡﹨﹍﹉﹎﹊ˇ︵︶︷︸︹︿﹀︺︽︾ˉ﹁﹂﹃﹄︻︼（）');
+        if ((bool) $options['allow_chinese_punctuation']) {
+            $chinesePunctuation = preg_quote('。、！？：；﹑•＂…\'\'""〝〞¦‖—　〈〉﹞﹝「」‹›〖〗】【»«』『〕〔》《﹐¸﹕︰﹔！¡？¿﹖﹌﹏﹋＇´ˊˋ―﹫︳︴¯＿￣﹢﹦﹤‐­˜﹟﹩﹠﹪﹡﹨﹍﹉﹎﹊ˇ︵︶︷︸︹︿﹀︺︽︾ˉ﹁﹂﹃﹄︻︼（）', '/');
             $blacklistPattern .= $chinesePunctuation;
         }
 
         // Add English punctuation if enabled
-        if ($options['allow_english_punctuation']) {
+        if ((bool) $options['allow_english_punctuation']) {
             $blacklistPattern .= '\`\~\!\@\#\$\%\^\&\*\(\)\_\+\-\=\[\]\{\}\\\|\;\'\'\:\"\"\,\.\/\>\?';
         }
 
         // Add emoji ranges if enabled
-        if ($options['allow_emoji']) {
-            if ($options['emoji_ranges']['emoticons']) {
+        if ((bool) $options['allow_emoji']) {
+            if ((bool) $options['emoji_ranges']['emoticons']) {
                 $blacklistPattern .= '\x{1F600}-\x{1F64F}';
             }
 
-            if ($options['emoji_ranges']['misc_symbols']) {
+            if ((bool) $options['emoji_ranges']['misc_symbols']) {
                 $blacklistPattern .= '\x{1F300}-\x{1F5FF}';
             }
 
-            if ($options['emoji_ranges']['transport_map']) {
+            if ((bool) $options['emoji_ranges']['transport_map']) {
                 $blacklistPattern .= '\x{1F680}-\x{1F6FF}';
             }
 
-            if ($options['emoji_ranges']['misc_symbols_2']) {
+            if ((bool) $options['emoji_ranges']['misc_symbols_2']) {
                 $blacklistPattern .= '\x{2600}-\x{26FF}';
             }
 
-            if ($options['emoji_ranges']['dingbats']) {
+            if ((bool) $options['emoji_ranges']['dingbats']) {
                 $blacklistPattern .= '\x{2700}-\x{27BF}';
             }
         }
@@ -69,6 +70,6 @@ class CharacterWhitelist implements PipelineStep
         $blacklistPattern .= ']';
 
         // Remove characters not in whitelist
-        return preg_replace('/'.$blacklistPattern.'/ui', '', $text);
+        return preg_replace('/'.$blacklistPattern.'/ui', '', $text) ?? $text;
     }
 }

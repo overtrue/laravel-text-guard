@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use Overtrue\TextGuard\TextGuard;
 use Overtrue\TextGuard\TextGuardable;
+use Overtrue\TextGuard\TextGuardState;
 use Tests\TestCase;
 use Tests\User;
 
@@ -12,16 +12,16 @@ class TextGuardableGlobalDisableTest extends TestCase
     protected function tearDown(): void
     {
         // 确保测试后恢复全局状态
-        TextGuardable::enableTextGuard();
+        TextGuardState::enableTextGuard();
         parent::tearDown();
     }
 
     public function test_global_disable_text_guard()
     {
         // 全局禁用 TextGuard
-        TextGuardable::disableTextGuard();
+        TextGuardState::disableTextGuard();
 
-        $this->assertTrue(TextGuardable::isTextGuardDisabled());
+        $this->assertTrue(TextGuardState::isTextGuardDisabled());
 
         // 使用具体的测试类
         $user = new class extends User
@@ -72,12 +72,12 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 先全局禁用
-        TextGuardable::disableTextGuard();
-        $this->assertTrue(TextGuardable::isTextGuardDisabled());
+        TextGuardState::disableTextGuard();
+        $this->assertTrue(TextGuardState::isTextGuardDisabled());
 
         // 再全局启用
-        TextGuardable::enableTextGuard();
-        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+        TextGuardState::enableTextGuard();
+        $this->assertFalse(TextGuardState::isTextGuardDisabled());
 
         $user->name = '  Test Name  ';
         $user->test_filter_text_guard_fields();
@@ -111,7 +111,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         ]);
 
         // 使用 withoutTextGuard 回调
-        $result = TextGuardable::withoutTextGuard(function () use ($user) {
+        $result = TextGuardState::withoutTextGuard(function () use ($user) {
             $user->test_filter_text_guard_fields();
 
             return $user->name;
@@ -123,7 +123,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         $this->assertEquals('  Test Bio  ', $user->bio);
 
         // 回调外应该恢复原状态
-        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+        $this->assertFalse(TextGuardState::isTextGuardDisabled());
     }
 
     public function test_global_disable_overrides_instance_disable()
@@ -146,7 +146,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 全局禁用
-        TextGuardable::disableTextGuard();
+        TextGuardState::disableTextGuard();
 
         $user->name = '  Test Name  ';
         $user->test_filter_text_guard_fields();
@@ -169,11 +169,11 @@ class TextGuardableGlobalDisableTest extends TestCase
             }
         };
 
-        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+        $this->assertFalse(TextGuardState::isTextGuardDisabled());
 
         try {
-            TextGuardable::withoutTextGuard(function () {
-                $this->assertTrue(TextGuardable::isTextGuardDisabled());
+            TextGuardState::withoutTextGuard(function () {
+                $this->assertTrue(TextGuardState::isTextGuardDisabled());
                 throw new \Exception('Test exception');
             });
         } catch (\Exception $e) {
@@ -181,7 +181,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         }
 
         // 即使抛出异常，也应该恢复原状态
-        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+        $this->assertFalse(TextGuardState::isTextGuardDisabled());
     }
 
     public function test_multiple_models_affected_by_global_disable()
@@ -222,7 +222,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 全局禁用
-        TextGuardable::disableTextGuard();
+        TextGuardState::disableTextGuard();
 
         $user1->name = '  Test Name  ';
         $user2->bio = '  Test Bio  ';
@@ -255,7 +255,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 全局禁用
-        TextGuardable::disableTextGuard();
+        TextGuardState::disableTextGuard();
 
         $user->name = '  Test Name  ';
         $user->bio = '  Test Bio  ';
@@ -267,7 +267,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         $this->assertEquals('  Test Bio  ', $user->bio);
 
         // 恢复全局状态
-        TextGuardable::enableTextGuard();
+        TextGuardState::enableTextGuard();
     }
 
     public function test_property_based_global_enable()
@@ -287,12 +287,12 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 先全局禁用
-        TextGuardable::disableTextGuard();
-        $this->assertTrue(TextGuardable::isTextGuardDisabled());
+        TextGuardState::disableTextGuard();
+        $this->assertTrue(TextGuardState::isTextGuardDisabled());
 
         // 再全局启用
-        TextGuardable::enableTextGuard();
-        $this->assertFalse(TextGuardable::isTextGuardDisabled());
+        TextGuardState::enableTextGuard();
+        $this->assertFalse(TextGuardState::isTextGuardDisabled());
 
         $user->name = '  Test Name  ';
         $user->test_filter_text_guard_fields();
@@ -324,7 +324,7 @@ class TextGuardableGlobalDisableTest extends TestCase
         };
 
         // 全局禁用
-        TextGuardable::disableTextGuard();
+        TextGuardState::disableTextGuard();
 
         $user->fill([
             'name' => 'ＵｓｅｒＮａｍｅ１２３',
@@ -340,6 +340,6 @@ class TextGuardableGlobalDisableTest extends TestCase
         $this->assertEquals('<script>alert("test")</script><p>Valid content</p>', $user->description);
 
         // 恢复全局状态
-        TextGuardable::enableTextGuard();
+        TextGuardState::enableTextGuard();
     }
 }

@@ -21,10 +21,10 @@ class NormalizePunctuations implements PipelineStep
                 '！' => '!',
                 '：' => ':',
                 '；' => ';',
-                '"' => '"',
-                '"' => '"',
-                '' => "'",
-                '' => "'",
+                '“' => '"',
+                '”' => '"',
+                '‘' => "'",
+                '’' => "'",
                 '（' => '(',
                 '）' => ')',
                 '【' => '[',
@@ -39,10 +39,8 @@ class NormalizePunctuations implements PipelineStep
                 '!' => '！',
                 ':' => '：',
                 ';' => '；',
-                '"' => '"',
-                '"' => '"',
-                "'" => "'",
-                "'" => "'",
+                '"' => '＂',
+                "'" => '＇',
                 '(' => '（',
                 ')' => '）',
                 '[' => '【',
@@ -53,8 +51,6 @@ class NormalizePunctuations implements PipelineStep
             default => []
         };
 
-        $filteredReplacements = array_filter($replacements, fn ($value, $key) => $value !== '' && $key !== '', ARRAY_FILTER_USE_BOTH);
-
-        return strtr($text, $filteredReplacements);
+        return strtr($text, $replacements);
     }
 }

@@ -18,7 +18,11 @@ class VisibleRatioGuard implements PipelineStep
         }
 
         // Calculate visible character count (remove control characters, zero-width characters, etc.)
-        $visibleText = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}]/u', '', $text);
+        $visibleText = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}\x{2060}]/u', '', $text);
+        if ($visibleText === null) {
+            return $text;
+        }
+
         $visibleLength = mb_strlen($visibleText);
 
         $ratio = $visibleLength / $totalLength;

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use InvalidArgumentException;
 use Overtrue\TextGuard\Pipeline\TrimWhitespace;
 use Overtrue\TextGuard\PipelineFactory;
 use Tests\TestCase;
@@ -60,5 +61,29 @@ class PipelineFactoryTest extends TestCase
         $this->assertCount(2, $steps);
         $this->assertContains('step1', $steps);
         $this->assertContains('step2', $steps);
+    }
+
+    public function test_build_pipeline_throws_when_class_does_not_exist()
+    {
+        $factory = new PipelineFactory([
+            'missing_step' => 'App\\TextGuard\\MissingPipeline',
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $factory->build(['missing_step' => true]);
+    }
+
+    public function test_build_pipeline_throws_when_class_does_not_implement_pipeline_step()
+    {
+        $factory = new PipelineFactory([
+            'invalid_step' => self::class,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('must implement');
+
+        $factory->build(['invalid_step' => true]);
     }
 }

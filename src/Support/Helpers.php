@@ -14,7 +14,7 @@ class Helpers
             return false;
         }
 
-        $invisibleChars = preg_replace('/[\p{L}\p{N}\p{P}\p{S}\p{Z}]/u', '', $text);
+        $invisibleChars = preg_replace('/[\p{L}\p{N}\p{P}\p{S}\p{Z}]/u', '', $text) ?? $text;
         $invisibleLength = mb_strlen($invisibleChars);
 
         return ($invisibleLength / $totalLength) > $threshold;
@@ -30,7 +30,7 @@ class Helpers
             return 1.0;
         }
 
-        $visibleText = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}]/u', '', $text);
+        $visibleText = preg_replace('/[\p{C}\x{200B}-\x{200D}\x{FEFF}\x{2060}]/u', '', $text) ?? $text;
         $visibleLength = mb_strlen($visibleText);
 
         return $visibleLength / $totalLength;
@@ -82,7 +82,7 @@ class Helpers
      */
     public static function removeZeroWidthChars(string $text): string
     {
-        return preg_replace('/[\x{200B}\x{200C}\x{200D}\x{FEFF}]/u', '', $text);
+        return preg_replace('/[\x{200B}\x{200C}\x{200D}\x{FEFF}\x{2060}]/u', '', $text) ?? $text;
     }
 
     /**
@@ -93,7 +93,7 @@ class Helpers
         // 移除首尾空白
         $text = trim($text);
         // 将多个连续空白字符替换为单个空格
-        $text = preg_replace('/\s+/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
 
         return $text;
     }

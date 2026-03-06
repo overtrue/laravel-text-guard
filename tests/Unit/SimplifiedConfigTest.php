@@ -50,4 +50,60 @@ class SimplifiedConfigTest extends TestCase
 
         $this->assertEquals('Hello World', $result);
     }
+
+    public function test_runtime_override_replaces_scalar_config()
+    {
+        $config = [
+            'preset' => 'test',
+            'pipeline_map' => [
+                'unicode_normalization' => \Overtrue\TextGuard\Pipeline\NormalizeUnicode::class,
+            ],
+            'presets' => [
+                'test' => [
+                    'unicode_normalization' => 'NFKC',
+                ],
+            ],
+        ];
+
+        $filter = new TextGuardManager($config);
+        $result = $filter->filter('ｔｅｓｔ', 'test', ['unicode_normalization' => 'NFC']);
+
+        $this->assertSame('ｔｅｓｔ', $result);
+    }
+
+    public function test_runtime_override_merges_nested_arrays_without_losing_defaults()
+    {
+        $config = [
+            'preset' => 'test',
+            'pipeline_map' => [
+                'character_whitelist' => \Overtrue\TextGuard\Pipeline\CharacterWhitelist::class,
+            ],
+            'presets' => [
+                'test' => [
+                    'character_whitelist' => [
+                        'enabled' => true,
+                        'allow_emoji' => true,
+                        'emoji_ranges' => [
+                            'emoticons' => true,
+                            'misc_symbols' => true,
+                            'transport_map' => true,
+                            'misc_symbols_2' => true,
+                            'dingbats' => true,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $filter = new TextGuardManager($config);
+        $result = $filter->filter('😀🎉', 'test', [
+            'character_whitelist' => [
+                'emoji_ranges' => [
+                    'emoticons' => false,
+                ],
+            ],
+        ]);
+
+        $this->assertSame('🎉', $result);
+    }
 }

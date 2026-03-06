@@ -37,12 +37,13 @@
         "Overtrue\\TextGuard\\TextGuardServiceProvider"
       ],
       "aliases": {
-        "TextGuard": "Overtrue\\TextGuard\\Facades\\TextGuard"
+        "TextGuard": "Overtrue\\TextGuard\\TextGuard"
       }
     }
   },
   "scripts": {
     "post-merge": "composer install",
+    "fix": "@fix-style",
     "check-style": "vendor/bin/pint --test",
     "fix-style": "vendor/bin/pint",
     "test": "phpunit --colors"

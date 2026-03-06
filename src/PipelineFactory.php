@@ -2,6 +2,9 @@
 
 namespace Overtrue\TextGuard;
 
+use InvalidArgumentException;
+use Overtrue\TextGuard\Pipeline\PipelineStep;
+
 class PipelineFactory
 {
     public function __construct(protected array $pipelineMap) {}
@@ -26,8 +29,16 @@ class PipelineFactory
     /**
      * Create pipeline step instance
      */
-    protected function createStep(string $class, mixed $config): object
+    protected function createStep(string $class, mixed $config): PipelineStep
     {
+        if (! class_exists($class)) {
+            throw new InvalidArgumentException("Pipeline step class [{$class}] does not exist.");
+        }
+
+        if (! is_a($class, PipelineStep::class, true)) {
+            throw new InvalidArgumentException("Pipeline step [{$class}] must implement ".PipelineStep::class.'.');
+        }
+
         // Normalize configuration
         $normalizedConfig = $this->normalizeConfig($config);
 

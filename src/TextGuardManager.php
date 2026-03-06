@@ -29,11 +29,11 @@ class TextGuardManager
     public function filter(string $text, ?string $preset = null, array $overrides = []): string
     {
         $preset = $preset ?: $this->config['preset'];
-        $steps = array_merge_recursive($this->config['presets'][$preset] ?? [], $overrides);
+        $steps = $this->mergeStepConfig($this->config['presets'][$preset] ?? [], $overrides);
 
         $pipeline = $this->pipelineFactory->build($steps);
 
-        foreach ($pipeline as $stepName => $step) {
+        foreach ($pipeline as $step) {
             $text = $step($text);
         }
 
@@ -61,11 +61,11 @@ class TextGuardManager
         }
 
         $errors = [];
-        $steps = array_merge_recursive($presetConfig, $overrides);
+        $steps = $this->mergeStepConfig($presetConfig, $overrides);
 
         // Check visible ratio guard
-        if (isset($steps['visible_ratio_guard']['min_ratio'])) {
-            $minRatio = $steps['visible_ratio_guard']['min_ratio'];
+        if (isset($steps['visible_ratio_guard']['min_ratio']) && is_numeric($steps['visible_ratio_guard']['min_ratio'])) {
+            $minRatio = (float) $steps['visible_ratio_guard']['min_ratio'];
             $visibleRatio = $this->calculateVisibleRatio($text);
 
             if ($visibleRatio < $minRatio) {
@@ -74,8 +74,8 @@ class TextGuardManager
         }
 
         // Check length limits
-        if (isset($steps['truncate_length']['max'])) {
-            $maxLength = $steps['truncate_length']['max'];
+        if (isset($steps['truncate_length']['max']) && is_numeric($steps['truncate_length']['max'])) {
+            $maxLength = (int) $steps['truncate_length']['max'];
 
             if (mb_strlen($text) > $maxLength) {
                 $errors[] = 'Text length ('.mb_strlen($text).") exceeds maximum allowed ({$maxLength})";
@@ -133,10 +133,10 @@ class TextGuardManager
         }
 
         // Remove control characters (except common whitespace)
-        $cleanText = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+        $cleanText = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text) ?? $text;
 
         // Remove zero-width characters
-        $cleanText = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{2060}]/u', '', $cleanText);
+        $cleanText = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{2060}]/u', '', $cleanText) ?? $cleanText;
 
         $visible = mb_strlen($cleanText);
 
@@ -199,5 +199,15 @@ class TextGuardManager
     public function getPresetConfig(string $preset): ?array
     {
         return $this->config['presets'][$preset] ?? null;
+    }
+
+    /**
+     * Merge preset steps with runtime overrides.
+     *
+     * Runtime overrides should replace scalar values rather than turning them into arrays.
+     */
+    protected function mergeStepConfig(array $presetConfig, array $overrides): array
+    {
+        return array_replace_recursive($presetConfig, $overrides);
     }
 }
