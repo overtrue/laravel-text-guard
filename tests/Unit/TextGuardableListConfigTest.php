@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Overtrue\TextGuard\TextGuardable;
 use Tests\TestCase;
 use Tests\User;
 
@@ -11,7 +12,7 @@ class TextGuardableListConfigTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 
@@ -49,7 +50,7 @@ class TextGuardableListConfigTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 
@@ -96,7 +97,7 @@ class TextGuardableListConfigTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             public function getTextGuardFields(): array
             {
@@ -112,7 +113,7 @@ class TextGuardableListConfigTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             public function getTextGuardFields(): array
             {

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Overtrue\TextGuard\TextGuardable;
 use Tests\TestCase;
 use Tests\User;
 
@@ -11,7 +12,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -45,7 +46,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 
@@ -87,7 +88,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -110,7 +111,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -146,7 +147,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -173,7 +174,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -200,7 +201,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -236,7 +237,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -271,7 +272,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 
@@ -303,7 +304,7 @@ class TextGuardableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 
