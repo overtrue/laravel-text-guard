@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Overtrue\TextGuard\TextGuardable;
 use Tests\TestCase;
 use Tests\User;
 
@@ -15,7 +16,7 @@ class ModelAutoFilterTest extends TestCase
         // Create a test model that uses TextGuardable
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -55,7 +56,7 @@ class ModelAutoFilterTest extends TestCase
         // Create a test model that uses TextGuardable
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -100,7 +101,7 @@ class ModelAutoFilterTest extends TestCase
         // Create a test model that uses TextGuardable with rich_text preset
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'description'];
 
@@ -135,7 +136,7 @@ class ModelAutoFilterTest extends TestCase
         // Create a test model that uses TextGuardable
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -171,7 +172,7 @@ class ModelAutoFilterTest extends TestCase
         // Create a test model that uses TextGuardable
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 

@@ -8,6 +8,6 @@ class TextGuard extends Facade
 {
     protected static function getFacadeAccessor()
     {
-        return \Overtrue\TextGuard\TextGuardManager::class;
+        return TextGuardManager::class;
     }
 }

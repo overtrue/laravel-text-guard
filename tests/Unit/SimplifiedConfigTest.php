@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use Overtrue\TextGuard\Pipeline\CharacterWhitelist;
+use Overtrue\TextGuard\Pipeline\NormalizeUnicode;
 use Overtrue\TextGuard\Pipeline\TrimWhitespace;
 use Overtrue\TextGuard\TextGuardManager;
 use Tests\TestCase;
@@ -56,7 +58,7 @@ class SimplifiedConfigTest extends TestCase
         $config = [
             'preset' => 'test',
             'pipeline_map' => [
-                'unicode_normalization' => \Overtrue\TextGuard\Pipeline\NormalizeUnicode::class,
+                'unicode_normalization' => NormalizeUnicode::class,
             ],
             'presets' => [
                 'test' => [
@@ -76,7 +78,7 @@ class SimplifiedConfigTest extends TestCase
         $config = [
             'preset' => 'test',
             'pipeline_map' => [
-                'character_whitelist' => \Overtrue\TextGuard\Pipeline\CharacterWhitelist::class,
+                'character_whitelist' => CharacterWhitelist::class,
             ],
             'presets' => [
                 'test' => [

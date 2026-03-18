@@ -56,7 +56,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -90,7 +90,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -130,7 +130,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -159,7 +159,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -188,7 +188,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user1 = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -205,7 +205,7 @@ class TextGuardableGlobalDisableTest extends TestCase
 
         $user2 = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['bio'];
 
@@ -239,7 +239,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio'];
 
@@ -274,7 +274,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name'];
 
@@ -305,7 +305,7 @@ class TextGuardableGlobalDisableTest extends TestCase
     {
         $user = new class extends User
         {
-            use \Overtrue\TextGuard\TextGuardable;
+            use TextGuardable;
 
             protected $fillable = ['name', 'bio', 'description'];
 

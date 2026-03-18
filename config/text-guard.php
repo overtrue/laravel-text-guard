@@ -1,5 +1,20 @@
 <?php
 
+use Overtrue\TextGuard\Pipeline\CharacterWhitelist;
+use Overtrue\TextGuard\Pipeline\CollapseRepeatedMarks;
+use Overtrue\TextGuard\Pipeline\CollapseSpaces;
+use Overtrue\TextGuard\Pipeline\FullwidthToHalfwidth;
+use Overtrue\TextGuard\Pipeline\HtmlDecode;
+use Overtrue\TextGuard\Pipeline\NormalizePunctuations;
+use Overtrue\TextGuard\Pipeline\NormalizeUnicode;
+use Overtrue\TextGuard\Pipeline\RemoveControlChars;
+use Overtrue\TextGuard\Pipeline\RemoveZeroWidth;
+use Overtrue\TextGuard\Pipeline\StripHtml;
+use Overtrue\TextGuard\Pipeline\TrimWhitespace;
+use Overtrue\TextGuard\Pipeline\TruncateLength;
+use Overtrue\TextGuard\Pipeline\VisibleRatioGuard;
+use Overtrue\TextGuard\Pipeline\WhitelistHtml;
+
 /**
  * Laravel TextGuard Configuration
  *
@@ -142,24 +157,24 @@ return [
     // - Pipeline 指南: https://github.com/overtrue/laravel-text-guard/blob/master/PIPELINE_GUIDE.zh-CN.md
     'pipeline_map' => [
         // No parameter constructor
-        'trim_whitespace' => \Overtrue\TextGuard\Pipeline\TrimWhitespace::class,
-        'collapse_spaces' => \Overtrue\TextGuard\Pipeline\CollapseSpaces::class,
-        'remove_control_chars' => \Overtrue\TextGuard\Pipeline\RemoveControlChars::class,
-        'remove_zero_width' => \Overtrue\TextGuard\Pipeline\RemoveZeroWidth::class,
-        'strip_html' => \Overtrue\TextGuard\Pipeline\StripHtml::class,
-        'html_decode' => \Overtrue\TextGuard\Pipeline\HtmlDecode::class,
+        'trim_whitespace' => TrimWhitespace::class,
+        'collapse_spaces' => CollapseSpaces::class,
+        'remove_control_chars' => RemoveControlChars::class,
+        'remove_zero_width' => RemoveZeroWidth::class,
+        'strip_html' => StripHtml::class,
+        'html_decode' => HtmlDecode::class,
 
         // Single parameter constructor
-        'unicode_normalization' => \Overtrue\TextGuard\Pipeline\NormalizeUnicode::class,
-        'normalize_punctuations' => \Overtrue\TextGuard\Pipeline\NormalizePunctuations::class,
+        'unicode_normalization' => NormalizeUnicode::class,
+        'normalize_punctuations' => NormalizePunctuations::class,
 
         // Array parameter constructor
-        'fullwidth_to_halfwidth' => \Overtrue\TextGuard\Pipeline\FullwidthToHalfwidth::class,
-        'whitelist_html' => \Overtrue\TextGuard\Pipeline\WhitelistHtml::class,
-        'collapse_repeated_marks' => \Overtrue\TextGuard\Pipeline\CollapseRepeatedMarks::class,
-        'visible_ratio_guard' => \Overtrue\TextGuard\Pipeline\VisibleRatioGuard::class,
-        'truncate_length' => \Overtrue\TextGuard\Pipeline\TruncateLength::class,
-        'character_whitelist' => \Overtrue\TextGuard\Pipeline\CharacterWhitelist::class,
+        'fullwidth_to_halfwidth' => FullwidthToHalfwidth::class,
+        'whitelist_html' => WhitelistHtml::class,
+        'collapse_repeated_marks' => CollapseRepeatedMarks::class,
+        'visible_ratio_guard' => VisibleRatioGuard::class,
+        'truncate_length' => TruncateLength::class,
+        'character_whitelist' => CharacterWhitelist::class,
 
         // You can add more custom pipeline step mappings here
         // 'custom_step' => \App\TextGuard\Pipeline\CustomStep::class,
