@@ -207,6 +207,61 @@ This redesign requires a breaking release:
 8. `nickname` now measures graphemes, retains joiners and omits the visibility heuristic. Other presets retain their character/length policies. Built-in presets now finish with trimming, so tag removal, zero-width removal or truncation cannot leave exposed leading/trailing whitespace.
 9. HTML whitelist filtering requires ext-dom instead of silently degrading.
 
+## For coding agents
+
+Use this section when integrating or extending the package. Do not invent APIs from memory or from 1.x behavior.
+
+### Scope
+
+- **For:** normalizing and validating user-supplied plain/rich strings via composable pipelines and Laravel-friendly opt-in hooks.
+- **Not for:** replacing output escaping (Blade `{{ }}`, `e()`, CSP, CSRF), authorization, rate limits, or storage encryption. Filtering here does not make HTML/JS safe to echo without boundary escaping.
+
+### Pick one integration path
+
+| Need | Do this |
+|------|---------|
+| Clean a string in code | `TextGuard::filter()` or `TextGuard::pipe()` |
+| Clean specific request keys on this `Request` / `FormRequest` | `$request->mergeFiltered(['field' => 'preset', 'items.*.name' => 'safe'])` in the controller or `prepareForValidation()` |
+| Clean during validation and return filtered values from `validated()` | Put `new Sanitize('preset')` **before** `new Filtered('preset')` on the same attribute |
+| Reject input that still needs filtering (client must submit already-clean text) | `new Filtered('preset')` only |
+| Clean declared fields on specific routes | Route middleware `text-guard.merge:field:preset,...` (alias registered by the package; **not** global) |
+| Clean on Eloquent save | `TextGuardable` with `$textGuardFields` — only when the app owns that model |
+
+`Sanitize` writes into **validator data only** (via `ValidatorAwareRule`). `Filtered` is a pure unchanged-input check and **never** mutates `request()`.
+
+`Sanitized` is unrelated: it is a **visibility-ratio heuristic**, not pipeline filtering. Do not substitute it for `Sanitize` or `Filtered`.
+
+Wildcards in `mergeFiltered()` use `Arr::dot` + `Str::is` on dotted keys (same idea as `items.*.name`). Middleware parameters are comma-separated `field:preset` pairs (only the first `:` splits); prefer `mergeFiltered()` when field patterns contain `:`.
+
+Unknown presets and invalid pipeline configuration throw `InvalidArgumentException`. `mergeFiltered()` skips non-strings and invalid UTF-8 without throwing; `Filtered` fails those cases; `Sanitize` skips them without failing.
+
+### Do not
+
+- Register `text-guard.merge` as global middleware.
+- Call `request()->merge()` from inside a validation rule.
+- Assume `Filtered` still cleans the request like 1.x — it rejects dirty input instead.
+- Confuse `Sanitize` (pipeline + `validated()` mutation) with `Sanitized` (invisible-character ratio).
+- Put `Filtered` before `Sanitize` on the same attribute (order matters).
+- Rely on `emoji_ranges` or other removed 1.x config keys.
+
+### 1.x → 2.x facts agents must not miss
+
+1. Pipeline steps run in **preset definition order**, not `pipeline_map` registration order.
+2. `Filtered` no longer mutates global request data.
+3. `mergeFiltered()`, `Sanitize`, and `text-guard.merge` run only when the application opts in.
+4. List-style overrides (HTML allowlists, etc.) **replace** the whole list; `[]` clears a list.
+5. Model preset typos throw instead of falling back to the default preset.
+6. Remove `emoji_ranges` from config; use `character_whitelist` / `allow_emoji` and custom steps instead.
+
+### Extending safely
+
+1. Implement `PipelineStep` with `__invoke(string $text): string`.
+2. Register with `TextGuard::registerPipelineStep('step_name', YourStep::class)`.
+3. Reference the step in `config/text-guard.php` under `pipeline_map` and in preset arrays (`true`, `'NFKC'`, or `[...]` per step).
+4. Use built-in preset names from config (`safe`, `strict`, `username`, `nickname`, `rich_text`) or define new presets — do not invent undocumented keys.
+
+Human maintainers: project-wide agent maintenance rules live in [AGENTS.md](AGENTS.md); integration rules for agents are defined in this section.
+
 ## Development
 
 ~~~bash
