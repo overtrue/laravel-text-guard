@@ -63,15 +63,36 @@ $accepted = $validator->validated();
 
 `Filtered` rejects values that need filtering and never writes to `request()`. It supports standalone validators and nested/wildcard fields. `mustNotBeEmpty: false` permits an unchanged empty string, not whitespace that would be removed. The optional `overrides` argument has the same semantics as `filter()`.
 
-When cleanup is intended, do it explicitly before validation:
+Nothing in this package rewrites the HTTP request unless you opt in. Pick one path:
+
+| Goal | Approach |
+|------|----------|
+| Filter a string in application code | `TextGuard::filter()` / `pipe()` |
+| Replace repeated `prepareForValidation()` boilerplate | `$request->mergeFiltered([...])` on `Request` / `FormRequest` |
+| Filter during validation, keep `validated()` clean | `Sanitize` rule (validator data only) |
+| Reject input that still needs filtering | `Filtered` rule (unchanged-input check) |
+| Filter specific route inputs before the controller | Opt-in `text-guard.merge` middleware |
+
+### `mergeFiltered()` on requests
+
+After the service provider boots, every `Request` exposes `mergeFiltered(array $fieldPresets)`. Each key is an attribute pattern; each value is a preset name. Matching string fields with valid UTF-8 are filtered and merged back onto **that request instance** only.
+
+~~~php
+$request->mergeFiltered([
+    'name' => 'safe',
+    'bio' => 'nickname',
+    'items.*.title' => 'safe', // wildcard patterns use Str::is() on dotted keys
+]);
+~~~
+
+Non-string and invalid UTF-8 values are left unchanged (no surprise exceptions). Unknown presets and invalid configuration still throw, same as `filter()`.
+
+Equivalent manual cleanup in a `FormRequest`:
 
 ~~~php
 protected function prepareForValidation(): void
 {
-    $name = $this->input('name');
-    if (is_string($name) && mb_check_encoding($name, 'UTF-8')) {
-        $this->merge(['name' => TextGuard::filter($name, 'safe')]);
-    }
+    $this->mergeFiltered(['name' => 'safe', 'bio' => 'nickname']);
 }
 
 public function rules(): array
@@ -79,6 +100,33 @@ public function rules(): array
     return ['name' => ['required', 'string', new Filtered('safe')]];
 }
 ~~~
+
+### `Sanitize` vs `Filtered`
+
+`Sanitize` runs the configured pipeline and writes the cleaned string into the **validator data** so `validated()` returns filtered values. It never calls `request()->merge()`.
+
+~~~php
+use Overtrue\TextGuard\Rules\Sanitize;
+use Overtrue\TextGuard\Rules\Filtered;
+
+$validator = validator($data, [
+    'nickname' => ['required', 'string', new Sanitize('username'), new Filtered('username')],
+]);
+$clean = $validator->validated(); // already filtered
+~~~
+
+Use `Filtered` alone when clients must submit already-clean text. Pair `Sanitize` with `Filtered` when you want automatic cleanup plus an unchanged-input guarantee after sanitization.
+
+### Opt-in route middleware
+
+The package registers the alias `text-guard.merge` only. **It is not global middleware.** Attach it to routes that should clean declared fields:
+
+~~~php
+Route::post('/profile', ...)
+    ->middleware('text-guard.merge:name:safe,bio:nickname');
+~~~
+
+Parameters use `field:preset` syntax. Only listed fields are touched.
 
 Use Laravel's `required`, `nullable` and length rules for business requirements. Invalid types/UTF-8 fail the `Filtered` rule; configuration errors still throw. `Sanitized(minVisibleRatio: 0.6, minLength: 1)` remains a **visibility heuristic**, not a guarantee that text is filtered or safe to render.
 
@@ -150,13 +198,14 @@ Escape at the HTML/attribute/JavaScript/Markdown output boundary. HTML whitelist
 This redesign requires a breaking release:
 
 1. Execution follows preset order. Audit configurations relying on `pipeline_map` order; decoding before tag removal now works as documented.
-2. `Filtered` no longer cleans global request data: it rejects dirty input. Move intended cleanup before validation.
-3. `validate()` checks the complete pipeline, including custom steps, rather than a hard-coded subset. Empty configured presets are valid.
-4. Unknown names, invalid step types and invalid UTF-8 fail explicitly. Use `false`, not `null`/`0`, to disable a step; `[]` enables defaults.
-5. Numeric option lists replace rather than merge. Review published allowlists. Model preset typos no longer fall back to the default.
-6. Remove `emoji_ranges` from published config. `allow_emoji` now handles Unicode sequences; obsolete range options throw. Use a custom step for application-specific symbol restrictions.
-7. `nickname` now measures graphemes, retains joiners and omits the visibility heuristic. Other presets retain their character/length policies. Built-in presets now finish with trimming, so tag removal, zero-width removal or truncation cannot leave exposed leading/trailing whitespace.
-8. HTML whitelist filtering requires ext-dom instead of silently degrading.
+2. `Filtered` no longer cleans global request data: it rejects dirty input. Use `mergeFiltered()`, `Sanitize`, or explicit `TextGuard::filter()` / `prepareForValidation()` when cleanup is intended.
+3. New opt-in helpers (`mergeFiltered()`, `Sanitize`, `text-guard.merge` middleware) never run unless you call or attach them.
+4. `validate()` checks the complete pipeline, including custom steps, rather than a hard-coded subset. Empty configured presets are valid.
+5. Unknown names, invalid step types and invalid UTF-8 fail explicitly. Use `false`, not `null`/`0`, to disable a step; `[]` enables defaults.
+6. Numeric option lists replace rather than merge. Review published allowlists. Model preset typos no longer fall back to the default.
+7. Remove `emoji_ranges` from published config. `allow_emoji` now handles Unicode sequences; obsolete range options throw. Use a custom step for application-specific symbol restrictions.
+8. `nickname` now measures graphemes, retains joiners and omits the visibility heuristic. Other presets retain their character/length policies. Built-in presets now finish with trimming, so tag removal, zero-width removal or truncation cannot leave exposed leading/trailing whitespace.
+9. HTML whitelist filtering requires ext-dom instead of silently degrading.
 
 ## Development
 

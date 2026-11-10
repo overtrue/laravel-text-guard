@@ -8,6 +8,7 @@ All notable changes to `overtrue/laravel-text-guard` will be documented in this 
 - Pass step options transparently, including empty arrays and keys named value; reject unknown names and invalid top-level option types.
 - Replace list overrides atomically, including HTML tag, attribute and protocol allowlists.
 - Make Filtered a pure unchanged-input validation rule, with explicit cleanup before validation; validate() now uses the complete pipeline.
+- Add Request::mergeFiltered() for field => preset maps (wildcard patterns on dotted keys), Sanitize validation rule that writes into validator data only, and opt-in text-guard.merge route middleware alias (never global).
 - Reject invalid UTF-8 at the executor boundary and stop silently falling back on misspelled model presets.
 - Add independent bidi-control removal, optional ZWNJ/ZWJ preservation and grapheme truncation.
 - Replace legacy emoji block options with whole-sequence Unicode matching; update nickname policy and reject obsolete emoji_ranges configuration.

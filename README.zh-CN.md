@@ -63,15 +63,36 @@ $accepted = $validator->validated();
 
 `Filtered` 拒绝需要清洗的值，不写入 `request()`，支持独立 Validator 和嵌套/通配字段。`mustNotBeEmpty: false` 允许原样的空字符串，不会允许需要被删除的空白。可选 `overrides` 参数与 `filter()` 一致。
 
-需要清洗后接受时，在校验前显式执行：
+除非显式启用，本包**不会**改写 HTTP 请求。按需选择：
+
+| 目的 | 方式 |
+|------|------|
+| 在业务代码中过滤字符串 | `TextGuard::filter()` / `pipe()` |
+| 减少重复的 `prepareForValidation()` | `Request` / `FormRequest` 上的 `mergeFiltered([...])` |
+| 校验时过滤并让 `validated()` 拿到干净值 | `Sanitize` 规则（只改 Validator 数据） |
+| 拒绝仍需清洗的输入 | `Filtered` 规则（不变性检查） |
+| 在进入控制器前清洗指定路由字段 | 可选的 `text-guard.merge` 中间件 |
+
+### 请求上的 `mergeFiltered()`
+
+服务提供者启动后，所有 `Request` 均支持 `mergeFiltered(array $fieldPresets)`：键为字段模式，值为预设名。命中的合法 UTF-8 字符串会过滤并合并回**当前请求实例**。
+
+~~~php
+$request->mergeFiltered([
+    'name' => 'safe',
+    'bio' => 'nickname',
+    'items.*.title' => 'safe', // 通配符对 Arr::dot 后的路径做 Str::is 匹配
+]);
+~~~
+
+非字符串与非法 UTF-8 原样保留（不突然抛错）。未知预设与非法配置仍与 `filter()` 一样抛异常。
+
+`FormRequest` 中等价写法：
 
 ~~~php
 protected function prepareForValidation(): void
 {
-    $name = $this->input('name');
-    if (is_string($name) && mb_check_encoding($name, 'UTF-8')) {
-        $this->merge(['name' => TextGuard::filter($name, 'safe')]);
-    }
+    $this->mergeFiltered(['name' => 'safe', 'bio' => 'nickname']);
 }
 
 public function rules(): array
@@ -79,6 +100,33 @@ public function rules(): array
     return ['name' => ['required', 'string', new Filtered('safe')]];
 }
 ~~~
+
+### `Sanitize` 与 `Filtered`
+
+`Sanitize` 按预设过滤，并把结果写入 **Validator 数据**，`validated()` 即为清洗后的值；不会调用 `request()->merge()`。
+
+~~~php
+use Overtrue\TextGuard\Rules\Sanitize;
+use Overtrue\TextGuard\Rules\Filtered;
+
+$validator = validator($data, [
+    'nickname' => ['required', 'string', new Sanitize('username'), new Filtered('username')],
+]);
+$clean = $validator->validated();
+~~~
+
+仅要求客户端提交已干净文本时使用 `Filtered`。需要自动清洗并仍做不变性检查时，可组合 `Sanitize` 与 `Filtered`。
+
+### 可选路由中间件
+
+包仅注册别名 `text-guard.merge`，**不是全局中间件**。在需要的路由上挂载：
+
+~~~php
+Route::post('/profile', ...)
+    ->middleware('text-guard.merge:name:safe,bio:nickname');
+~~~
+
+参数为 `字段:预设`，只处理声明的字段。
 
 必填、可空、业务长度等条件由 Laravel 的 `required`、`nullable`、长度规则承担。非法类型/UTF-8 在 `Filtered` 中返回校验失败；配置错误仍抛异常。`Sanitized(minVisibleRatio: 0.6, minLength: 1)` 仅是**可见度启发式检查**，不保证文本已经清洗或可安全渲染。
 
@@ -150,13 +198,14 @@ HTML/属性/JavaScript/Markdown 分别在输出边界转义。HTML 白名单过�
 本次设计调整需要破坏性版本发布：
 
 1. 按预设顺序执行。检查依赖 `pipeline_map` 顺序的配置；先解码再去标签现已符合文档。
-2. `Filtered` 不再清洗全局请求，而是拒绝脏输入；有意清洗的入口改为先过滤、后校验。
-3. `validate()` 校验完整管道，包括自定义步骤，不再维护硬编码子集。显式空预设有效。
-4. 未知名称、非法步骤类型、非法 UTF-8 明确失败。使用 `false` 而非 `null`/`0` 禁用步骤；`[]` 表示启用默认参数。
-5. 数字索引列表整体替换，不递归合并；检查已发布的白名单。模型预设拼写错误不再回退。
-6. 从已发布配置移除 `emoji_ranges`。`allow_emoji` 改为识别 Unicode 序列；旧区间参数抛异常。特定符号限制使用自定义步骤。
-7. `nickname` 改为按字素计数、保留连接符、去掉可见度启发式检查。其他预设保留原有字符和长度策略。内置预设统一在末尾去除首尾空白，避免去标签、去零宽字符或截断后残留空白。
-8. HTML 白名单过滤必须有 ext-dom，不再静默降级。
+2. `Filtered` 不再清洗全局请求，而是拒绝脏输入；有意清洗可使用 `mergeFiltered()`、`Sanitize` 或显式 `TextGuard::filter()` / `prepareForValidation()`。
+3. 新增可选能力（`mergeFiltered()`、`Sanitize`、`text-guard.merge` 中间件）仅在调用或挂载时生效。
+4. `validate()` 校验完整管道，包括自定义步骤，不再维护硬编码子集。显式空预设有效。
+5. 未知名称、非法步骤类型、非法 UTF-8 明确失败。使用 `false` 而非 `null`/`0` 禁用步骤；`[]` 表示启用默认参数。
+6. 数字索引列表整体替换，不递归合并；检查已发布的白名单。模型预设拼写错误不再回退。
+7. 从已发布配置移除 `emoji_ranges`。`allow_emoji` 改为识别 Unicode 序列；旧区间参数抛异常。特定符号限制使用自定义步骤。
+8. `nickname` 改为按字素计数、保留连接符、去掉可见度启发式检查。其他预设保留原有字符和长度策略。内置预设统一在末尾去除首尾空白，避免去标签、去零宽字符或截断后残留空白。
+9. HTML 白名单过滤必须有 ext-dom，不再静默降级。
 
 ## 开发
 
