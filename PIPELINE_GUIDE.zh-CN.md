@@ -1,425 +1,104 @@
-# Laravel TextGuard Pipeline 使用指南
+# Pipeline 参数参考
 
-本文档详细介绍了 Laravel TextGuard 包中所有 Pipeline 步骤的用法、参数配置和默认值。
+[English](PIPELINE_GUIDE.md) · [用法与升级说明](README.zh-CN.md)
 
-## 目录
+## 组合契约
 
-- [基础 Pipeline](#基础-pipeline)
-- [Unicode 处理 Pipeline](#unicode-处理-pipeline)
-- [HTML 处理 Pipeline](#html-处理-pipeline)
-- [字符过滤 Pipeline](#字符过滤-pipeline)
-- [长度控制 Pipeline](#长度控制-pipeline)
-- [配置示例](#配置示例)
+`TextGuard::pipe($text, $steps)` 按传入顺序执行步骤。`filter($text, $preset, $overrides)` 解析预设后调用同一执行器。`validate()` 判断该管道是否保持文本不变，自定义步骤自动参与。
 
-## 基础 Pipeline
+配置为 `true`（默认构造）、`false`（禁用）、字符串（单个构造参数）或数组（原样传入，包括 `[]`）。未知名称和非法顶层配置类型抛异常。同一个类注册为多个名称即可重复执行；注册表只决定可用步骤，不决定顺序。
 
-### 1. TrimWhitespace - 去除首尾空白
+overrides 保留已有步骤位置，追加新步骤；关联配置递归合并，列表整体替换。缩短 HTML 白名单不能残留旧列表尾部的允许项。需要重新排序时，直接提供完整的 `pipe()` 配置。
 
-**功能**: 去除字符串开头和结尾的空白字符（包括全角空格）
+## 内置步骤
 
-**参数**: 无
+| 步骤 | 参数 / 默认值 | 职责 |
+| --- | --- | --- |
+| `trim_whitespace` | 无 | 去除首尾 Unicode 空白 |
+| `collapse_spaces` | 无 | 折叠连续空白 |
+| `remove_control_chars` | 无 | 移除 ASCII 控制字符，保留 tab、LF、CR |
+| `remove_zero_width` | `preserve_joiners: false` | 移除 U+200B/U+200C/U+200D/U+FEFF/U+2060，可选择保留 U+200C/U+200D |
+| `remove_bidi_controls` | 无 | 移除 U+061C/U+200E/U+200F/U+202A–U+202E/U+2066–U+2069 |
+| `unicode_normalization` | 字符串 `NFKC` | NFC/NFD/NFKC/NFKD 规范化 |
+| `fullwidth_to_halfwidth` | `ascii: true, digits: true, latin: true, punct: false` | 现有 mb_convert_kana 的 a/n/r/s 标志；标志有重叠，s 实际转换全角空格 |
+| `normalize_punctuations` | 字符串 `zh` | 按 `zh` 或 `en` 习惯转换标点 |
+| `html_decode` | `enabled: true, flags: ENT_QUOTES \| ENT_HTML5, encoding: UTF-8` | 解码一轮 HTML 实体 |
+| `strip_html` | 无 | 去 HTML 标签，保留文本内容 |
+| `whitelist_html` | 见下文 | 基于 DOM 的标签、属性、协议白名单 |
+| `character_whitelist` | 见下文 | 保留允许的文本，可选整体保留 emoji 序列 |
+| `collapse_repeated_marks` | `max_repeat: 2, charset: '!?。，、…—'` | 限制指定标点的连续重复次数 |
+| `visible_ratio_guard` | `min_ratio: 0.6` | 当前文本不满足码点可见度启发式比例时返回空串 |
+| `truncate_length` | `max: 5000, unit: codepoint` | 按码点或字素限制长度 |
 
-**默认值**: 无
+配置中用 `false` 禁用步骤。Unicode/标点规范化类的直接构造仍允许 null，但 `null` 不是合法的管道配置值。
 
-**使用示例**:
-```php
-// 配置
-'trim_whitespace' => true
+## Unicode 操作
 
-// 效果
-"  Hello World  " → "Hello World"
-"　中文内容　" → "中文内容"
-```
-
-### 2. CollapseSpaces - 合并连续空格
-
-**功能**: 将多个连续的空白字符合并为单个空格
-
-**参数**: 无
-
-**默认值**: 无
-
-**使用示例**:
-```php
-// 配置
-'collapse_spaces' => true
-
-// 效果
-"Hello    World" → "Hello World"
-"多    个    空格" → "多 个 空格"
-```
-
-### 3. RemoveControlChars - 移除控制字符
-
-**功能**: 移除控制字符，但保留换行符和制表符
-
-**参数**: 无
-
-**默认值**: 无
-
-**使用示例**:
-```php
-// 配置
-'remove_control_chars' => true
-
-// 效果
-"Hello\x00World" → "HelloWorld"
-"Text\x1F\x7F" → "Text"
-```
-
-### 4. RemoveZeroWidth - 移除零宽字符
-
-**功能**: 移除零宽字符（U+200B..200D, U+FEFF）
-
-**参数**: 无
-
-**默认值**: 无
-
-**使用示例**:
-```php
-// 配置
-'remove_zero_width' => true
-
-// 效果
-"Hello\u{200B}World" → "HelloWorld"
-"Text\u{FEFF}" → "Text"
-```
-
-## Unicode 处理 Pipeline
-
-### 5. NormalizeUnicode - Unicode 规范化
-
-**功能**: 对文本进行 Unicode 规范化处理
-
-**参数**:
-- `form` (string|null): 规范化形式，默认为 `'NFKC'`
-
-**可选值**:
-- `'NFC'`: Canonical Decomposition, followed by Canonical Composition
-- `'NFD'`: Canonical Decomposition
-- `'NFKC'`: Compatibility Decomposition, followed by Canonical Composition
-- `'NFKD'`: Compatibility Decomposition
-- `null`: 禁用规范化
-
-**使用示例**:
-```php
-// 配置
-'unicode_normalization' => 'NFKC'
-
-// 效果
-"café" → "café" (规范化)
-"①" → "1" (兼容性分解)
-```
-
-### 6. FullwidthToHalfwidth - 全角转半角
-
-**功能**: 将全角字符转换为半角字符
-
-**参数**:
-- `ascii` (bool): 转换全角 ASCII 字符，默认 `true`
-- `digits` (bool): 转换全角数字，默认 `true`
-- `latin` (bool): 转换全角拉丁字母，默认 `true`
-- `punct` (bool): 转换全角标点符号，默认 `false`
-
-**使用示例**:
-```php
-// 配置
-'fullwidth_to_halfwidth' => [
-    'ascii' => true,
-    'digits' => true,
-    'latin' => true,
-    'punct' => false, // 保留中文标点
-]
-
-// 效果
-"Ｈｅｌｌｏ　Ｗｏｒｌｄ！" → "Hello World！"
-"１２３４５" → "12345"
-```
-
-### 7. NormalizePunctuations - 标点符号规范化
-
-**功能**: 根据语言环境规范化标点符号
-
-**参数**:
-- `locale` (string|null): 语言环境，默认为 `'zh'`
-
-**可选值**:
-- `'zh'`: 将英文标点转换为中文标点
-- `'en'`: 将中文标点转换为英文标点
-- `null`: 禁用规范化
-
-**使用示例**:
-```php
-// 配置
-'normalize_punctuations' => 'zh'
-
-// 效果 (zh 模式)
-"Hello, World!" → "Hello，World！"
-"Hello, World!" → "Hello，World！"
-
-// 配置
-'normalize_punctuations' => 'en'
-
-// 效果 (en 模式)
-"Hello，World！" → "Hello, World!"
-```
-
-## HTML 处理 Pipeline
-
-### 8. StripHtml - 移除 HTML 标签
-
-**功能**: 移除所有 HTML 标签
-
-**参数**: 无
-
-**默认值**: 无
-
-**使用示例**:
-```php
-// 配置
-'strip_html' => true
-
-// 效果
-"<p>Hello <b>World</b></p>" → "Hello World"
-"<script>alert('xss')</script>" → "alert('xss')"
-```
-
-### 9. HtmlDecode - HTML 实体解码
-
-**功能**: 解码 HTML 实体
-
-**参数**:
-- `enabled` (bool): 是否启用，默认 `true`
-- `flags` (int): 解码标志，默认 `ENT_QUOTES | ENT_HTML5`
-- `encoding` (string): 编码格式，默认 `'UTF-8'`
-
-**使用示例**:
-```php
-// 配置
-'html_decode' => true
-
-// 效果
-"&lt;script&gt;" → "<script>"
-"&amp;&quot;" → "&""
-```
-
-### 10. WhitelistHtml - HTML 白名单过滤
-
-**功能**: 只保留允许的 HTML 标签和属性
-
-**参数**:
-- `tags` (array): 允许的标签列表，默认 `['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3']`
-- `attrs` (array): 允许的属性列表，默认 `['href', 'title', 'rel']`
-- `protocols` (array): 允许的协议列表，默认 `['http', 'https', 'mailto']`
-
-**使用示例**:
-```php
-// 配置
-'whitelist_html' => [
-    'tags' => ['p', 'b', 'i', 'a'],
-    'attrs' => ['href'],
-    'protocols' => ['http', 'https'],
-]
-
-// 效果
-"<p><b>Hello</b> <a href='http://example.com'>World</a></p>" → 保留
-"<script>alert('xss')</script>" → 移除
-"<a href='javascript:alert(1)'>Link</a>" → 移除 href 属性
-```
-
-## 字符过滤 Pipeline
-
-### 11. CharacterWhitelist - 字符白名单过滤
-
-**功能**: 只保留允许的字符类型
-
-**参数**:
-- `enabled` (bool): 是否启用，默认 `true`
-- `allow_emoji` (bool): 是否允许表情符号，默认 `true`
-- `allow_chinese_punctuation` (bool): 是否允许中文标点，默认 `true`
-- `allow_english_punctuation` (bool): 是否允许英文标点，默认 `true`
-- `emoji_ranges` (array): 表情符号范围配置
-  - `emoticons` (bool): 表情符号，默认 `true`
-  - `misc_symbols` (bool): 杂项符号，默认 `true`
-  - `transport_map` (bool): 交通符号，默认 `true`
-  - `misc_symbols_2` (bool): 杂项符号2，默认 `true`
-  - `dingbats` (bool): 装饰符号，默认 `true`
-
-**使用示例**:
-```php
-// 配置
-'character_whitelist' => [
-    'enabled' => true,
-    'allow_emoji' => true,
-    'allow_chinese_punctuation' => true,
-    'allow_english_punctuation' => true,
-    'emoji_ranges' => [
-        'emoticons' => true,
-        'misc_symbols' => false,
-        'transport_map' => false,
-        'misc_symbols_2' => false,
-        'dingbats' => false,
-    ],
-]
-
-// 效果
-"Hello World! 😊" → "Hello World! 😊" (保留)
-"Hello World! 🚗" → "Hello World! " (移除交通符号)
-```
-
-### 12. CollapseRepeatedMarks - 合并重复标点
-
-**功能**: 限制重复标点符号的最大重复次数
-
-**参数**:
-- `max_repeat` (int): 最大重复次数，默认 `2`
-- `charset` (string): 要处理的字符集，默认 `'!?。，、…—'`
-
-**使用示例**:
-```php
-// 配置
-'collapse_repeated_marks' => [
-    'max_repeat' => 1,
-    'charset' => '_-.',
-]
-
-// 效果
-"Hello!!!" → "Hello!!" (限制为2个)
-"Hello___World" → "Hello_World" (限制为1个)
-```
-
-## 长度控制 Pipeline
-
-### 13. VisibleRatioGuard - 可见字符比例检查
-
-**功能**: 检查可见字符比例，低于阈值时返回空字符串
-
-**参数**:
-- `min_ratio` (float): 最小可见字符比例，默认 `0.6`
-
-**使用示例**:
-```php
-// 配置
-'visible_ratio_guard' => ['min_ratio' => 0.8]
-
-// 效果
-"Hello World" → "Hello World" (比例 > 0.8)
-"Hello\u{200B}\u{200B}\u{200B}World" → "" (比例 < 0.8)
-```
-
-### 14. TruncateLength - 长度截断
-
-**功能**: 截断超过最大长度的文本
-
-**参数**:
-- `max` (int): 最大长度，默认 `5000`
-
-**使用示例**:
-```php
-// 配置
-'truncate_length' => ['max' => 100]
-
-// 效果
-"Hello World" → "Hello World" (长度 < 100)
-"Very long text..." → "Very long text..." (截断到100字符)
-```
-
-## 配置示例
-
-### 基础文本处理
-```php
-'basic_text' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'strip_html' => true,
-    'visible_ratio_guard' => ['min_ratio' => 0.6],
-    'truncate_length' => ['max' => 1000],
-],
-```
-
-### 用户名处理
-```php
-'username' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
-    'normalize_punctuations' => 'en',
-    'strip_html' => true,
-    'collapse_repeated_marks' => [
-        'max_repeat' => 1,
-        'charset' => '_-.',
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.9],
-    'truncate_length' => ['max' => 50],
-],
-```
-
-### 富文本处理
-```php
-'rich_text' => [
-    'trim_whitespace' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
+~~~php
+TextGuard::pipe($text, [
     'unicode_normalization' => 'NFC',
-    'whitelist_html' => [
-        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
-        'attrs' => ['href', 'title', 'rel'],
-        'protocols' => ['http', 'https', 'mailto'],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.5],
-    'truncate_length' => ['max' => 20000],
-],
-```
+    'remove_bidi_controls' => true,
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'truncate_length' => ['max' => 40, 'unit' => 'grapheme'],
+]);
+~~~
 
-### 严格模式
-```php
-'strict' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
+这些选择彼此独立。双向控制符不等于全部从右向左书写的文字。连接符在波斯文、印度文字和 emoji 中有实际含义；保留连接符不代表验证其位置。后续字符白名单仍可能移除它们。
+
+`truncate_length` 接受非负整数 max，以及 `codepoint` / `grapheme` 单位。零返回空串。字素使用已要求的 intl 扩展，不新增依赖；分段由 ICU 决定。输入必须是合法 UTF-8。两种模式都不理解 HTML 结构或显示列宽。
+
+可见度比例按码点计算，连接字符可能被计为不可见。它不证明视觉真实性，也可能拒绝合法 emoji 或文字，不应默认加入所有管道。
+
+## 字符白名单
+
+参数：
+
+- `enabled: true`
+- `allow_emoji: true`
+- `allow_chinese_punctuation: true`
+- `allow_english_punctuation: true`
+
+普通字符白名单保留 word 字符、汉字、空白和选定标点，不等于身份标识或文件名策略。emoji 识别将图形序列（包括 ZWJ、肤色）、区域指示符对、键帽、tag 序列作为整体处理，使用 Unicode 属性代替手写历史区间，但不是 RGI 校验器。属性支持随 PCRE 版本，字素分段随运行时 Unicode 数据。
+
+`emoji_ranges` 已移除，传入会抛异常。要限制特定符号，注册独立的应用步骤；Unicode 区块并不等于语义类别。
+
+~~~php
+TextGuard::pipe($text, [
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'character_whitelist' => ['allow_emoji' => true],
+    'truncate_length' => ['max' => 30, 'unit' => 'grapheme'],
+]);
+~~~
+
+## HTML 参数与执行顺序
+
+`whitelist_html` 默认值：
+
+~~~php
+[
+    'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
+    'attrs' => ['href', 'title', 'rel'],
+    'protocols' => ['http', 'https', 'mailto'],
+]
+~~~
+
+每个列表完整替换默认值，`[]` 清空对应列表。缺少 ext-dom 时抛异常，不降级为能力更弱的实现。白名单必须可信且尽量收窄；这不能代替覆盖更广威胁模型的专业富文本清洗器。
+
+对于含编码标签的纯文本：
+
+~~~php
+TextGuard::pipe('&lt;b&gt;Hello&lt;/b&gt;', [
     'html_decode' => true,
     'strip_html' => true,
-    'character_whitelist' => [
-        'enabled' => true,
-        'allow_emoji' => false,
-        'allow_chinese_punctuation' => true,
-        'allow_english_punctuation' => true,
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.8],
-    'truncate_length' => ['max' => 5000],
-],
-```
+]); // Hello
+~~~
 
-## 使用建议
+反过来执行会得到 `<b>Hello</b>`，这是顺序的直接结果，说明顺序应由调用者而非注册表决定。实体解码只执行一轮，不承诺递归规范化。`strip_html` 保留 script 的文本内容，两者都不能代替上下文转义。
 
-1. **基础文本**: 使用 `trim_whitespace`、`collapse_spaces`、`remove_control_chars`、`remove_zero_width` 组合
-2. **用户名**: 添加 `unicode_normalization`、`fullwidth_to_halfwidth`、`normalize_punctuations`
-3. **昵称**: 允许表情符号，使用 `character_whitelist` 控制
-4. **富文本**: 使用 `whitelist_html` 而不是 `strip_html`
-5. **严格模式**: 禁用表情符号，提高可见字符比例要求
+不要截断已经清洗的 HTML 字符串后，就认为结果仍有正确结构。应校验输入大小，或在最终清洗前使用理解 DOM 的步骤。Markdown、HTML 属性与 HTML 文本节点的渲染要求各不相同。
 
-## 注意事项
+## 自定义步骤
 
-- Pipeline 步骤按配置顺序执行
-- 某些步骤可能会影响后续步骤的效果
-- 建议先进行基础清理，再进行特殊处理
-- 长度控制类步骤通常放在最后
-- 测试时注意 Unicode 字符的处理效果
+实现 `PipelineStep::__invoke(string $text): string`，通过 `registerPipelineStep($name, $class)` 注册，再在预设或 `pipe()` 中使用。数组原样传入构造函数，`value` 键没有特殊含义。步骤不应有请求、存储或渲染副作用。
+
+业务检测器和替换器可以独立组合，不需要把手机号、邮箱或域名策略加入工具核心。测试既覆盖应被转换的输入，也覆盖必须保持不变的普通文本；最终渲染测试与字符串转换测试分开。

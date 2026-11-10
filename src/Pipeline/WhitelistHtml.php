@@ -12,7 +12,7 @@ class WhitelistHtml implements PipelineStep
 
     public function __invoke(string $text): string
     {
-        $options = array_replace_recursive([
+        $options = array_replace([
             'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
             'attrs' => ['href', 'title', 'rel'],
             'protocols' => ['http', 'https', 'mailto'],
@@ -23,9 +23,7 @@ class WhitelistHtml implements PipelineStep
         }
 
         if (! class_exists(DOMDocument::class)) {
-            $allowedTags = '<'.implode('><', $options['tags']).'>';
-
-            return strip_tags($text, $allowedTags);
+            throw new \LogicException('The ext-dom extension is required for HTML whitelist filtering.');
         }
 
         return $this->sanitizeHtml(

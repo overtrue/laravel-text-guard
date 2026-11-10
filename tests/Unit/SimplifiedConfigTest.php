@@ -73,39 +73,19 @@ class SimplifiedConfigTest extends TestCase
         $this->assertSame('ｔｅｓｔ', $result);
     }
 
-    public function test_runtime_override_merges_nested_arrays_without_losing_defaults()
+    public function test_runtime_override_merges_options_without_losing_defaults(): void
     {
-        $config = [
+        $filter = new TextGuardManager([
             'preset' => 'test',
-            'pipeline_map' => [
-                'character_whitelist' => CharacterWhitelist::class,
-            ],
-            'presets' => [
-                'test' => [
-                    'character_whitelist' => [
-                        'enabled' => true,
-                        'allow_emoji' => true,
-                        'emoji_ranges' => [
-                            'emoticons' => true,
-                            'misc_symbols' => true,
-                            'transport_map' => true,
-                            'misc_symbols_2' => true,
-                            'dingbats' => true,
-                        ],
-                    ],
-                ],
-            ],
-        ];
-
-        $filter = new TextGuardManager($config);
-        $result = $filter->filter('😀🎉', 'test', [
-            'character_whitelist' => [
-                'emoji_ranges' => [
-                    'emoticons' => false,
-                ],
-            ],
+            'pipeline_map' => ['character_whitelist' => CharacterWhitelist::class],
+            'presets' => ['test' => ['character_whitelist' => [
+                'allow_emoji' => false,
+                'allow_english_punctuation' => false,
+                'allow_chinese_punctuation' => false,
+            ]]],
         ]);
-
-        $this->assertSame('🎉', $result);
+        $this->assertSame('abc!', $filter->filter('abc!😀，', 'test', [
+            'character_whitelist' => ['allow_english_punctuation' => true],
+        ]));
     }
 }

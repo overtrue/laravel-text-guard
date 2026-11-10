@@ -2,6 +2,18 @@
 
 All notable changes to `overtrue/laravel-text-guard` will be documented in this file.
 
+## Unreleased — composable pipeline redesign (breaking)
+
+- Execute steps in preset order; add direct TextGuard::pipe() composition without a preset. Finish built-in normalization with trimming so explicit cleanup produces values accepted by unchanged-input validation.
+- Pass step options transparently, including empty arrays and keys named value; reject unknown names and invalid top-level option types.
+- Replace list overrides atomically, including HTML tag, attribute and protocol allowlists.
+- Make Filtered a pure unchanged-input validation rule, with explicit cleanup before validation; validate() now uses the complete pipeline.
+- Reject invalid UTF-8 at the executor boundary and stop silently falling back on misspelled model presets.
+- Add independent bidi-control removal, optional ZWNJ/ZWJ preservation and grapheme truncation.
+- Replace legacy emoji block options with whole-sequence Unicode matching; update nickname policy and reject obsolete emoji_ranges configuration.
+- Require ext-dom for HTML whitelist filtering rather than degrading to tag-only filtering.
+- Consolidate English/Chinese documentation with composition boundaries and migration instructions. No application-specific masking rules are introduced.
+
 ## [1.0.3] - 2026-03-06
 
 ### Fixed

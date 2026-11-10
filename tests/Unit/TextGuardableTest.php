@@ -39,7 +39,7 @@ class TextGuardableTest extends TestCase
         // Simulate the saving event
         $user->test_filter_text_guard_fields();
 
-        $this->assertEquals('Test User ', $user->name);
+        $this->assertEquals('Test User', $user->name);
     }
 
     public function test_different_presets_for_different_fields()
