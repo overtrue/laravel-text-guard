@@ -75,4 +75,14 @@ class SanitizeTest extends TestCase
         $this->assertSame(' Hello ', $validator->validated()['name']);
         $this->assertSame('Hello', TextGuard::filter(' Hello ', 'safe'));
     }
+
+    public function test_sanitize_writes_nested_wildcard_attributes(): void
+    {
+        $validator = validator(['items' => [['name' => '  A  ']]], [
+            'items.*.name' => [new Sanitize('safe')],
+        ]);
+
+        $this->assertTrue($validator->passes());
+        $this->assertSame('A', $validator->validated()['items'][0]['name']);
+    }
 }

@@ -207,6 +207,61 @@ HTML/属性/JavaScript/Markdown 分别在输出边界转义。HTML 白名单过�
 8. `nickname` 改为按字素计数、保留连接符、去掉可见度启发式检查。其他预设保留原有字符和长度策略。内置预设统一在末尾去除首尾空白，避免去标签、去零宽字符或截断后残留空白。
 9. HTML 白名单过滤必须有 ext-dom，不再静默降级。
 
+## 面向编码代理
+
+集成或扩展本包时请遵循本节。不要凭记忆或 1.x 行为臆造 API。
+
+### 范围
+
+- **适用：** 通过可组合管道与 Laravel 可选入口，对用户提交的纯文本/富文本做规范化与校验。
+- **不适用：** 替代输出转义（Blade `{{ }}`、`e()`、CSP、CSRF）、鉴权、限流或存储加密。此处过滤不能替代在输出边界对 HTML/JS 的转义。
+
+### 选择一种集成方式
+
+| 需求 | 做法 |
+|------|------|
+| 在代码中清洗字符串 | `TextGuard::filter()` 或 `TextGuard::pipe()` |
+| 清洗当前 `Request` / `FormRequest` 上的指定键 | 在控制器或 `prepareForValidation()` 中调用 `$request->mergeFiltered(['field' => 'preset', 'items.*.name' => 'safe'])` |
+| 校验时清洗且 `validated()` 返回干净值 | 同一字段上 **`new Sanitize('preset')` 放在 `new Filtered('preset')` 之前** |
+| 拒绝仍需过滤的输入（要求客户端已提交干净文本） | 仅使用 `new Filtered('preset')` |
+| 在特定路由上清洗声明字段 | 路由中间件 `text-guard.merge:field:preset,...`（包注册别名；**不要**挂为全局中间件） |
+| 在 Eloquent 保存时清洗 | 应用自有模型上使用 `TextGuardable` 与 `$textGuardFields` |
+
+`Sanitize` 只写入**校验器数据**（`ValidatorAwareRule`）。`Filtered` 是纯「输入未改变」检查，**绝不**修改 `request()`。
+
+`Sanitized` 无关管道过滤：它是**可见字符比例启发式**，不能替代 `Sanitize` 或 `Filtered`。
+
+`mergeFiltered()` 通配符对 `Arr::dot` 后的点号键做 `Str::is`（与 `items.*.name` 相同）。中间件参数为逗号分隔的 `field:preset`（仅在第一个 `:` 处分割）；字段模式含 `:` 时请用 `mergeFiltered()`。
+
+未知预设与非法管道配置会抛 `InvalidArgumentException`。`mergeFiltered()` 对非字符串与非法 UTF-8 静默跳过；`Filtered` 会使其失败；`Sanitize` 跳过且不失败。
+
+### 禁止
+
+- 将 `text-guard.merge` 注册为全局中间件。
+- 在校验规则内调用 `request()->merge()`。
+- 假设 `Filtered` 仍会像 1.x 一样清洗请求——2.x 改为拒绝脏输入。
+- 混淆 `Sanitize`（管道 + 改写 `validated()`）与 `Sanitized`（不可见字符比例）。
+- 在同一字段上把 `Filtered` 放在 `Sanitize` 之前（顺序很重要）。
+- 继续使用已移除的 `emoji_ranges` 等 1.x 配置键。
+
+### 1.x → 2.x 代理必须知道的变更
+
+1. 管道按**预设定义顺序**执行，而非 `pipeline_map` 注册顺序。
+2. `Filtered` 不再修改全局请求数据。
+3. `mergeFiltered()`、`Sanitize`、`text-guard.merge` 仅在应用显式启用时运行。
+4. 列表类覆盖（HTML 白名单等）**整体替换**；`[]` 表示清空列表。
+5. 模型预设拼写错误会抛异常，不再回退默认预设。
+6. 从配置中移除 `emoji_ranges`；使用 `character_whitelist` / `allow_emoji` 与自定义步骤。
+
+### 安全扩展
+
+1. 实现 `PipelineStep`，提供 `__invoke(string $text): string`。
+2. 使用 `TextGuard::registerPipelineStep('step_name', YourStep::class)` 注册。
+3. 在 `config/text-guard.php` 的 `pipeline_map` 与预设数组中引用（`true`、`'NFKC'` 或 `[...]`）。
+4. 使用配置中的内置预设名（`safe`、`strict`、`username`、`nickname`、`rich_text`）或定义新预设——不要编造未文档化的键。
+
+人工维护者：仓库级代理维护规则见 [AGENTS.md](AGENTS.md)；面向代理的集成规则以本节为准。
+
 ## 开发
 
 ~~~bash

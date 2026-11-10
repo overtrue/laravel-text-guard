@@ -1,5 +1,9 @@
 # Laravel TextGuard - AI Agent 开发规则
 
+## Application integration (read first for feature work)
+
+When wiring this package into a Laravel app (routes, FormRequests, validation rules), follow **[For coding agents](README.md#for-coding-agents)** in `README.md` (中文：[面向编码代理](README.zh-CN.md#面向编码代理)). That section is the source of truth for opt-in request mutation, `Sanitize` vs `Filtered` vs `Sanitized`, middleware usage, and 1.x → 2.x migration. Do not reintroduce 1.x `Filtered` request mutation or global middleware.
+
 ## Maintenance guidelines
 
 - Prefer minimal, high-confidence changes.

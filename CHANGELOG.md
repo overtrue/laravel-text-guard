@@ -2,18 +2,30 @@
 
 All notable changes to `overtrue/laravel-text-guard` will be documented in this file.
 
-## Unreleased — composable pipeline redesign (breaking)
+## [2.0.0] - 2026-11-10
 
-- Execute steps in preset order; add direct TextGuard::pipe() composition without a preset. Finish built-in normalization with trimming so explicit cleanup produces values accepted by unchanged-input validation.
-- Pass step options transparently, including empty arrays and keys named value; reject unknown names and invalid top-level option types.
+### Changed
+
+- Execute steps in preset order; add direct `TextGuard::pipe()` composition without a preset. Finish built-in normalization with trimming so explicit cleanup produces values accepted by unchanged-input validation.
+- Pass step options transparently, including empty arrays and keys named `value`; reject unknown names and invalid top-level option types.
 - Replace list overrides atomically, including HTML tag, attribute and protocol allowlists.
-- Make Filtered a pure unchanged-input validation rule, with explicit cleanup before validation; validate() now uses the complete pipeline.
-- Add Request::mergeFiltered() for field => preset maps (wildcard patterns on dotted keys), Sanitize validation rule that writes into validator data only, and opt-in text-guard.merge route middleware alias (never global).
+- Make `Filtered` a pure unchanged-input validation rule, with explicit cleanup before validation; `validate()` now uses the complete pipeline.
+- Add `Request::mergeFiltered()` for field => preset maps (wildcard patterns on dotted keys), `Sanitize` validation rule that writes into validator data only, and opt-in `text-guard.merge` route middleware alias (never global).
 - Reject invalid UTF-8 at the executor boundary and stop silently falling back on misspelled model presets.
 - Add independent bidi-control removal, optional ZWNJ/ZWJ preservation and grapheme truncation.
-- Replace legacy emoji block options with whole-sequence Unicode matching; update nickname policy and reject obsolete emoji_ranges configuration.
+- Replace legacy emoji block options with whole-sequence Unicode matching; update nickname policy and reject obsolete `emoji_ranges` configuration.
 - Require ext-dom for HTML whitelist filtering rather than degrading to tag-only filtering.
-- Consolidate English/Chinese documentation with composition boundaries and migration instructions. No application-specific masking rules are introduced.
+- Consolidate English/Chinese documentation with composition boundaries and migration instructions. Add README sections for coding agents (integration paths and explicit don'ts).
+
+### Notes
+
+- No application-specific masking rules are introduced.
+
+## [1.0.4] - 2026-03-18
+
+### Added
+
+- Laravel 13 / Illuminate 13 support in `composer.json` (alongside Laravel 12).
 
 ## [1.0.3] - 2026-03-06
 
@@ -30,4 +42,6 @@ All notable changes to `overtrue/laravel-text-guard` will be documented in this 
 - Added release script alias `composer fix` for consistent formatting workflow.
 - Expanded unit tests for override-merging behavior, sanitization security, invalid input resilience, and pipeline factory validation.
 
+[2.0.0]: https://github.com/overtrue/laravel-text-guard/compare/1.0.4...2.0.0
+[1.0.4]: https://github.com/overtrue/laravel-text-guard/compare/1.0.3...1.0.4
 [1.0.3]: https://github.com/overtrue/laravel-text-guard/compare/1.0.2...1.0.3
