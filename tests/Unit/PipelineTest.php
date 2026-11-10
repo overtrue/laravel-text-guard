@@ -208,25 +208,10 @@ class PipelineTest extends TestCase
         $this->assertEquals('测试！！', $result);
     }
 
-    public function test_character_whitelist_accepts_partial_emoji_range_overrides()
+    public function test_character_whitelist_rejects_obsolete_range_configuration(): void
     {
-        $filter = new CharacterWhitelist([
-            'emoji_ranges' => [
-                'emoticons' => false,
-            ],
-        ]);
-
-        set_error_handler(static function (int $severity, string $message): never {
-            throw new \ErrorException($message, 0, $severity);
-        });
-
-        try {
-            $clean = $filter('abc😀🎉');
-        } finally {
-            restore_error_handler();
-        }
-
-        $this->assertSame('abc🎉', $clean);
+        $this->expectException(\InvalidArgumentException::class);
+        new CharacterWhitelist(['emoji_ranges' => ['emoticons' => false]]);
     }
 
     public function test_trim_whitespace_with_invalid_utf8_returns_original_text()

@@ -9,78 +9,44 @@ class PipelineFactory
 {
     public function __construct(protected array $pipelineMap) {}
 
-    /**
-     * Build processing pipeline
-     */
     public function build(array $steps): array
     {
         $pipeline = [];
 
-        foreach ($this->pipelineMap as $stepName => $class) {
-            if (! empty($steps[$stepName])) {
-                $stepConfig = $steps[$stepName];
-                $pipeline[$stepName] = $this->createStep($class, $stepConfig);
+        foreach ($steps as $name => $config) {
+            if (! array_key_exists($name, $this->pipelineMap)) {
+                throw new InvalidArgumentException("Unknown pipeline step [{$name}].");
             }
+            if ($config === false) {
+                continue;
+            }
+            $pipeline[$name] = $this->createStep($this->pipelineMap[$name], $config);
         }
 
         return $pipeline;
     }
 
-    /**
-     * Create pipeline step instance
-     */
     protected function createStep(string $class, mixed $config): PipelineStep
     {
         if (! class_exists($class)) {
             throw new InvalidArgumentException("Pipeline step class [{$class}] does not exist.");
         }
-
         if (! is_a($class, PipelineStep::class, true)) {
             throw new InvalidArgumentException("Pipeline step [{$class}] must implement ".PipelineStep::class.'.');
         }
 
-        // Normalize configuration
-        $normalizedConfig = $this->normalizeConfig($config);
-
-        // Create instance based on configuration type
         return match (true) {
-            empty($normalizedConfig) => new $class,
-            isset($normalizedConfig['value']) => new $class($normalizedConfig['value']),
-            default => new $class($normalizedConfig),
+            $config === true => new $class,
+            is_string($config), is_array($config) => new $class($config),
+            default => throw new InvalidArgumentException('Step configuration must be a boolean, string or array.'),
         };
     }
 
-    /**
-     * Normalize configuration to array format
-     */
-    protected function normalizeConfig(mixed $config): array
-    {
-        if (is_array($config)) {
-            return $config;
-        }
-
-        if (is_string($config)) {
-            return ['value' => $config];
-        }
-
-        if (is_bool($config) && $config) {
-            return ['enabled' => true];
-        }
-
-        return [];
-    }
-
-    /**
-     * Register new pipeline step
-     */
     public function register(string $name, string $class): void
     {
         $this->pipelineMap[$name] = $class;
     }
 
-    /**
-     * Get all available pipeline step names
-     */
     public function getAvailableSteps(): array
     {
         return array_keys($this->pipelineMap);

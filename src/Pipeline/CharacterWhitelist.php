@@ -2,9 +2,16 @@
 
 namespace Overtrue\TextGuard\Pipeline;
 
+use InvalidArgumentException;
+
 class CharacterWhitelist implements PipelineStep
 {
-    public function __construct(protected array $options = []) {}
+    public function __construct(protected array $options = [])
+    {
+        if (array_key_exists('emoji_ranges', $options)) {
+            throw new InvalidArgumentException('emoji_ranges is no longer supported; use allow_emoji or a custom pipeline step.');
+        }
+    }
 
     public function __invoke(string $text): string
     {
@@ -13,13 +20,6 @@ class CharacterWhitelist implements PipelineStep
             'allow_emoji' => true,
             'allow_chinese_punctuation' => true,
             'allow_english_punctuation' => true,
-            'emoji_ranges' => [
-                'emoticons' => true,        // [\x{1F600}-\x{1F64F}]
-                'misc_symbols' => true,     // [\x{1F300}-\x{1F5FF}]
-                'transport_map' => true,    // [\x{1F680}-\x{1F6FF}]
-                'misc_symbols_2' => true,   // [\x{2600}-\x{26FF}]
-                'dingbats' => true,         // [\x{2700}-\x{27BF}]
-            ],
         ];
         $options = array_replace_recursive($defaults, $this->options);
 
@@ -44,32 +44,19 @@ class CharacterWhitelist implements PipelineStep
             $blacklistPattern .= '\`\~\!\@\#\$\%\^\&\*\(\)\_\+\-\=\[\]\{\}\\\|\;\'\'\:\"\"\,\.\/\>\?';
         }
 
-        // Add emoji ranges if enabled
-        if ((bool) $options['allow_emoji']) {
-            if ((bool) $options['emoji_ranges']['emoticons']) {
-                $blacklistPattern .= '\x{1F600}-\x{1F64F}';
-            }
-
-            if ((bool) $options['emoji_ranges']['misc_symbols']) {
-                $blacklistPattern .= '\x{1F300}-\x{1F5FF}';
-            }
-
-            if ((bool) $options['emoji_ranges']['transport_map']) {
-                $blacklistPattern .= '\x{1F680}-\x{1F6FF}';
-            }
-
-            if ((bool) $options['emoji_ranges']['misc_symbols_2']) {
-                $blacklistPattern .= '\x{2600}-\x{26FF}';
-            }
-
-            if ((bool) $options['emoji_ranges']['dingbats']) {
-                $blacklistPattern .= '\x{2700}-\x{27BF}';
-            }
-        }
-
         $blacklistPattern .= ']';
 
-        // Remove characters not in whitelist
-        return preg_replace('/'.$blacklistPattern.'/ui', '', $text) ?? $text;
+        $pictograph = '\p{Extended_Pictographic}\x{FE0F}?[\x{1F3FB}-\x{1F3FF}]?';
+        $emoji = '/\A(?:'.$pictograph.'(?:\x{200D}'.$pictograph.')*'
+            .'|[\x{1F1E6}-\x{1F1FF}]{2}|[0-9#*]\x{FE0F}?\x{20E3}'
+            .'|\x{1F3F4}[\x{E0061}-\x{E007A}]+\x{E007F})\z/u';
+
+        return preg_replace_callback('/\X/u', function (array $match) use ($options, $emoji, $blacklistPattern): string {
+            if (preg_match($emoji, $match[0]) === 1) {
+                return $options['allow_emoji'] ? $match[0] : '';
+            }
+
+            return preg_replace('/'.$blacklistPattern.'/ui', '', $match[0]) ?? $match[0];
+        }, $text) ?? $text;
     }
 }

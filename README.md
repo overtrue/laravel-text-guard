@@ -1,67 +1,175 @@
 # Laravel TextGuard
 
-A powerful string sanitization and normalization tool for Laravel that can be used as validation rules or standalone utility.
+Composable string filtering and explicit validation for Laravel.
 
-[中文文档](README.zh-CN.md) | [English Documentation](README.md)
+[中文文档](README.zh-CN.md) · [Pipeline reference](PIPELINE_GUIDE.md)
 
-## Documentation
+## Install
 
-- [Pipeline Guide](PIPELINE_GUIDE.md) - Complete guide to all pipeline steps
-- [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md) - 所有 pipeline 步骤的完整指南
+Requires PHP 8.3+, Laravel 12/13, mbstring and intl. HTML whitelist filtering additionally requires ext-dom.
 
-## Installation
-
-```bash
+~~~bash
 composer require overtrue/laravel-text-guard
-```
-
-## Publish Configuration
-
-```bash
 php artisan vendor:publish --tag=text-guard-config
-```
+~~~
 
-## Basic Usage
+## Compose operations, not business policies
 
-### As a Utility
+Every step is a string-to-string operation. Use a preset for reuse, or compose an ordered pipeline directly:
 
-```php
+~~~php
 use Overtrue\TextGuard\TextGuard;
 
-// Use default 'safe' preset
-$clean = TextGuard::filter($dirty);
-
-// Use specified preset
-$clean = TextGuard::filter($dirty, 'username');
-
-// Override configuration
-$clean = TextGuard::filter($dirty, 'safe', [
-    'truncate_length' => ['max' => 100]
+$clean = TextGuard::pipe($input, [
+    'html_decode' => true,
+    'strip_html' => true,
+    'unicode_normalization' => 'NFC',
+    'remove_bidi_controls' => true,
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'collapse_spaces' => true,
+    'trim_whitespace' => true,
+    'truncate_length' => ['max' => 80, 'unit' => 'grapheme'],
 ]);
-```
 
-### As Validation Rules
+$clean = TextGuard::filter($input, 'safe');
+$clean = TextGuard::filter($input, 'safe', ['truncate_length' => ['max' => 100]]);
+$cleanByKey = TextGuard::batchFilter(['title' => $input], 'safe');
+~~~
 
-```php
+Steps execute in the supplied order, not registry order. A preset is just a named ordered configuration. There are no built-in phone thresholds, domain suffix lists, email-specific replacements or filename policies.
+
+- `true` enables defaults; `false` disables a step. A string or array (including `[]`) is passed directly to the constructor.
+- Overrides recursively merge associative options. Lists replace whole lists, including `[]` to clear an allowlist.
+- Existing step positions are retained by overrides; new steps append. Use `pipe()` or a new preset to change order. Register the same class under different names to run it more than once.
+- Unknown presets/steps and invalid configuration types throw `InvalidArgumentException`. An explicitly configured empty preset or `pipe($input, [])` is an identity operation.
+- `filter()` and `pipe()` reject invalid UTF-8. Configuration is trusted application code, not user input.
+
+For non-Facade usage, instantiate `TextGuardManager` with the configuration array. Its string operations do not read the HTTP request.
+
+## Choose filtering or rejection explicitly
+
+Filtering returns a new string without mutating input or the HTTP request. Validation checks whether the configured pipeline leaves the string unchanged:
+
+~~~php
+$result = TextGuard::validate($input, 'safe'); // ['valid' => bool, 'errors' => array]
+
 use Overtrue\TextGuard\Rules\Filtered;
-use Overtrue\TextGuard\Rules\Sanitized;
 
-// Filter then validate
 $validator = validator($data, [
-    'nickname' => [new Filtered('username')]
+    'items.*.name' => ['required', 'string', new Filtered('safe')],
 ]);
+$accepted = $validator->validated();
+~~~
 
-// Validate visibility only
+`Filtered` rejects values that need filtering and never writes to `request()`. It supports standalone validators and nested/wildcard fields. `mustNotBeEmpty: false` permits an unchanged empty string, not whitespace that would be removed. The optional `overrides` argument has the same semantics as `filter()`.
+
+Nothing in this package rewrites the HTTP request unless you opt in. Pick one path:
+
+| Goal | Approach |
+|------|----------|
+| Filter a string in application code | `TextGuard::filter()` / `pipe()` |
+| Replace repeated `prepareForValidation()` boilerplate | `$request->mergeFiltered([...])` on `Request` / `FormRequest` |
+| Filter during validation, keep `validated()` clean | `Sanitize` rule (validator data only) |
+| Reject input that still needs filtering | `Filtered` rule (unchanged-input check) |
+| Filter specific route inputs before the controller | Opt-in `text-guard.merge` middleware |
+
+### `mergeFiltered()` on requests
+
+After the service provider boots, every `Request` exposes `mergeFiltered(array $fieldPresets)`. Each key is an attribute pattern; each value is a preset name. Matching string fields with valid UTF-8 are filtered and merged back onto **that request instance** only.
+
+~~~php
+$request->mergeFiltered([
+    'name' => 'safe',
+    'bio' => 'nickname',
+    'items.*.title' => 'safe', // wildcard patterns use Str::is() on dotted keys
+]);
+~~~
+
+Non-string and invalid UTF-8 values are left unchanged (no surprise exceptions). Unknown presets and invalid configuration still throw, same as `filter()`.
+
+Equivalent manual cleanup in a `FormRequest`:
+
+~~~php
+protected function prepareForValidation(): void
+{
+    $this->mergeFiltered(['name' => 'safe', 'bio' => 'nickname']);
+}
+
+public function rules(): array
+{
+    return ['name' => ['required', 'string', new Filtered('safe')]];
+}
+~~~
+
+### `Sanitize` vs `Filtered`
+
+`Sanitize` runs the configured pipeline and writes the cleaned string into the **validator data** so `validated()` returns filtered values. It never calls `request()->merge()`.
+
+~~~php
+use Overtrue\TextGuard\Rules\Sanitize;
+use Overtrue\TextGuard\Rules\Filtered;
+
 $validator = validator($data, [
-    'content' => [new Sanitized(0.8, 1)]
+    'nickname' => ['required', 'string', new Sanitize('username'), new Filtered('username')],
 ]);
-```
+$clean = $validator->validated(); // already filtered
+~~~
 
-### Model Auto-Filtering
+Use `Filtered` alone when clients must submit already-clean text. Pair `Sanitize` with `Filtered` when you want automatic cleanup plus an unchanged-input guarantee after sanitization.
 
-Use the `TextGuardable` trait to provide automatic filtering for model fields:
+### Opt-in route middleware
 
-```php
+The package registers the alias `text-guard.merge` only. **It is not global middleware.** Attach it to routes that should clean declared fields:
+
+~~~php
+Route::post('/profile', ...)
+    ->middleware('text-guard.merge:name:safe,bio:nickname');
+~~~
+
+Parameters use `field:preset` syntax. Only listed fields are touched.
+
+Use Laravel's `required`, `nullable` and length rules for business requirements. Invalid types/UTF-8 fail the `Filtered` rule; configuration errors still throw. `Sanitized(minVisibleRatio: 0.6, minLength: 1)` remains a **visibility heuristic**, not a guarantee that text is filtered or safe to render.
+
+## Independent Unicode policies
+
+- `remove_zero_width` removes U+200B/U+200C/U+200D/U+FEFF/U+2060 by default. `preserve_joiners: true` keeps ZWNJ/ZWJ for writing systems and emoji; it does not validate their placement.
+- `remove_bidi_controls` removes Unicode Bidi_Control characters while preserving ordinary RTL letters and joiners. It is opt-in because directional formatting can be intentional.
+- `truncate_length` defaults to code points. Choose `unit: grapheme` for user-perceived characters, combining marks and emoji sequences. `max: 0` returns an empty string; invalid maxima/units throw.
+- `character_whitelist` recognizes pictographic ZWJ sequences, modifiers, regional-indicator pairs, keycaps and emoji tag sequences as units. It is not an RGI emoji validator. Recognition depends on runtime Unicode tables; grapheme truncation uses ICU.
+
+The `nickname` example preset preserves joiners, uses grapheme limits and omits the code-point visibility heuristic. A later step can still undo an earlier decision: preserving joiners does not override a character whitelist. Choose operations appropriate to the text's language and purpose.
+
+## Reusable presets and extensions
+
+Built-ins: `safe`, `strict`, `username`, `nickname`, `rich_text`. Exact definitions live in `config/text-guard.php`; names are convenience labels, not security guarantees.
+
+~~~php
+use Overtrue\TextGuard\Pipeline\PipelineStep;
+
+class ReplaceText implements PipelineStep
+{
+    public function __construct(private array $replacements = []) {}
+
+    public function __invoke(string $text): string
+    {
+        return strtr($text, $this->replacements);
+    }
+}
+
+TextGuard::registerPipelineStep('replace_text', ReplaceText::class);
+$display = TextGuard::pipe($input, [
+    'strip_html' => true,
+    'replace_text' => ['[' => '(', ']' => ')'],
+]);
+~~~
+
+This example is literal replacement, not HTML/Markdown escaping. Domain-specific detection and masking belong in separately composed custom steps. Replacement choices should not force normalization, storage or rendering policies.
+
+Introspection: `getAvailableSteps()`, `getAvailablePresets()`, `getPresetConfig($name)`.
+
+## Eloquent integration is opt-in
+
+~~~php
 use Illuminate\Database\Eloquent\Model;
 use Overtrue\TextGuard\TextGuardable;
 
@@ -69,532 +177,42 @@ class User extends Model
 {
     use TextGuardable;
 
-    protected $fillable = ['name', 'bio', 'description'];
-
-    // Method 1: Associative array (specify different presets)
-    protected $textGuardFields = [
-        'name' => 'username',        // Username uses stricter filtering
-        'bio' => 'safe',             // Bio uses safe filtering
-        'description' => 'rich_text' // Description allows rich text
-    ];
-
-    // Method 2: Indexed array (use default preset)
-    protected $textGuardFields = ['name', 'bio', 'description'];
-    protected $textGuardDefaultPreset = 'safe';
-
-    // Method 3: Mixed configuration (some fields use default, some specify preset)
-    protected $textGuardFields = [
-        'name',  // Use default preset
-        'bio' => 'safe',  // Specify preset
-        'description' => 'rich_text'  // Specify preset
-    ];
-    protected $textGuardDefaultPreset = 'username';
+    protected $textGuardFields = ['name' => 'nickname', 'bio' => 'safe'];
 }
-```
+~~~
 
-When the model is saved, specified fields are automatically filtered:
+Only dirty, non-null configured attributes are filtered on saving. Lists of field names use `getTextGuardDefaultPreset()`; associative entries specify presets. Mixed lists are supported. Unknown preset names throw instead of falling back silently.
 
-```php
-$user = new User();
-$user->fill([
-    'name' => 'ＵｓｅｒＮａｍｅ１２３！！！',  // Full-width characters
-    'bio' => 'Normal text' . json_decode('"\u200B"') . 'hidden content',  // Zero-width characters
-    'description' => '<script>alert("XSS")</script><p>Normal content</p>',  // HTML
-]);
-$user->save();
+Override `getTextGuardFields()` / `getTextGuardDefaultPreset()` instead of properties if needed. `filterField($field, $preset)` returns a value without assigning it; `getTextGuardFieldNames()` returns normalized names. `disableTextGuard()` / `enableTextGuard()` affect all models in the process. `withoutTextGuard($callback)` restores the previous state on success or exception. Do not use process-wide toggles across concurrent requests.
 
-// After saving, data has been automatically filtered:
-// $user->name = 'UserName123!!!'  // Full-width to half-width
-// $user->bio = 'Normal texthidden content'  // Zero-width characters removed
-// $user->description = '<p>Normal content</p>'  // Dangerous tags removed, safe tags preserved
-```
+Do not persist display-only masking unless overwriting the original value is intended.
 
-#### Dynamic Field Management
+## Rendering and composition boundaries
 
-```php
-$user = new User();
+`strip_html` is tag removal, not contextual output encoding. `html_decode` performs one pass. Put decoding before tag removal when that is the desired contract; do not silently decode repeatedly until stable. Arbitrary pipelines are not guaranteed to be idempotent.
 
+Escape at the HTML/attribute/JavaScript/Markdown output boundary. HTML whitelist filtering requires ext-dom rather than degrading to an attribute-preserving tag stripper. Allowlists replace defaults. Do not decode or normalize HTML after sanitization without reconsidering the final output. String truncation is not DOM-aware; for rich text, reject oversized input or use DOM-aware truncation before final sanitization.
 
-// Manually filter fields
-$filtered = $user->filterField('bio', 'safe');
+## Upgrading: breaking changes
 
-// Get current configuration
-$fields = $user->getTextGuardFields(); // Returns filtering field configuration
-$fields = $user->getTextGuardFields(); // Returns field list
-```
+This redesign requires a breaking release:
 
-### FormRequest Integration
+1. Execution follows preset order. Audit configurations relying on `pipeline_map` order; decoding before tag removal now works as documented.
+2. `Filtered` no longer cleans global request data: it rejects dirty input. Use `mergeFiltered()`, `Sanitize`, or explicit `TextGuard::filter()` / `prepareForValidation()` when cleanup is intended.
+3. New opt-in helpers (`mergeFiltered()`, `Sanitize`, `text-guard.merge` middleware) never run unless you call or attach them.
+4. `validate()` checks the complete pipeline, including custom steps, rather than a hard-coded subset. Empty configured presets are valid.
+5. Unknown names, invalid step types and invalid UTF-8 fail explicitly. Use `false`, not `null`/`0`, to disable a step; `[]` enables defaults.
+6. Numeric option lists replace rather than merge. Review published allowlists. Model preset typos no longer fall back to the default.
+7. Remove `emoji_ranges` from published config. `allow_emoji` now handles Unicode sequences; obsolete range options throw. Use a custom step for application-specific symbol restrictions.
+8. `nickname` now measures graphemes, retains joiners and omits the visibility heuristic. Other presets retain their character/length policies. Built-in presets now finish with trimming, so tag removal, zero-width removal or truncation cannot leave exposed leading/trailing whitespace.
+9. HTML whitelist filtering requires ext-dom instead of silently degrading.
 
-```php
-class UpdateProfileRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('nickname')) {
-            $this->merge([
-                'nickname' => TextGuard::filter(
-                    (string)$this->input('nickname'),
-                    'username'
-                ),
-            ]);
-        }
-    }
+## Development
 
-    public function rules(): array
-    {
-        return [
-            'nickname' => ['required', 'string', new Sanitized(0.9, 1)],
-            'bio' => ['nullable', new Filtered('safe', false)],
-        ];
-    }
-}
-```
-
-## Pipeline Usage
-
-Laravel TextGuard provides 14 built-in pipeline steps for text processing. Each pipeline step can be configured with specific parameters to meet different requirements.
-
-### Available Pipeline Steps
-
-#### Basic Text Processing
-- **`trim_whitespace`** - Remove leading/trailing whitespace (including full-width spaces)
-- **`collapse_spaces`** - Collapse multiple consecutive spaces into single space
-- **`remove_control_chars`** - Remove control characters while preserving newlines and tabs
-- **`remove_zero_width`** - Remove zero-width characters (U+200B..200D, U+FEFF)
-
-#### Unicode Processing
-- **`unicode_normalization`** - Unicode normalization (NFC, NFD, NFKC, NFKD)
-- **`fullwidth_to_halfwidth`** - Convert fullwidth characters to halfwidth
-- **`normalize_punctuations`** - Normalize punctuation based on locale (zh/en)
-
-#### HTML Processing
-- **`strip_html`** - Remove all HTML tags
-- **`html_decode`** - Decode HTML entities
-- **`whitelist_html`** - Keep only allowed HTML tags and attributes
-
-#### Character Filtering
-- **`character_whitelist`** - Keep only allowed character types (with emoji support)
-- **`collapse_repeated_marks`** - Limit repeated punctuation marks
-
-#### Length Control
-- **`visible_ratio_guard`** - Check visible character ratio
-- **`truncate_length`** - Truncate text to maximum length
-
-### Pipeline Configuration Examples
-
-#### Basic Text Cleaning
-```php
-'basic_clean' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'strip_html' => true,
-    'visible_ratio_guard' => ['min_ratio' => 0.6],
-    'truncate_length' => ['max' => 1000],
-],
-```
-
-#### Username Processing
-```php
-'username' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
-    'normalize_punctuations' => 'en',
-    'strip_html' => true,
-    'collapse_repeated_marks' => [
-        'max_repeat' => 1,
-        'charset' => '_-.',
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.9],
-    'truncate_length' => ['max' => 50],
-],
-```
-
-#### Rich Text Processing
-```php
-'rich_text' => [
-    'trim_whitespace' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFC',
-    'whitelist_html' => [
-        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
-        'attrs' => ['href', 'title', 'rel'],
-        'protocols' => ['http', 'https', 'mailto'],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.5],
-    'truncate_length' => ['max' => 20000],
-],
-```
-
-#### Nickname with Emoji Support
-```php
-'nickname' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => false, // Preserve Chinese punctuation
-    ],
-    'html_decode' => true,
-    'strip_html' => true,
-    'character_whitelist' => [
-        'enabled' => true,
-        'allow_emoji' => true,
-        'allow_chinese_punctuation' => true,
-        'allow_english_punctuation' => true,
-        'emoji_ranges' => [
-            'emoticons' => true,
-            'misc_symbols' => true,
-            'transport_map' => true,
-            'misc_symbols_2' => true,
-            'dingbats' => true,
-        ],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.7],
-    'truncate_length' => ['max' => 30],
-],
-```
-
-### Pipeline Parameter Types
-
-The system automatically passes configuration to constructors based on type:
-
-- **Boolean values** (`true`/`false`) → No parameter constructor: `new Class()`
-- **String values** (`'NFKC'`) → Single parameter constructor: `new Class('NFKC')`
-- **Array values** (`['max' => 100]`) → Array parameter constructor: `new Class(['max' => 100])`
-
-### Usage Tips
-
-1. **Order matters**: Pipeline steps are executed in configuration order
-2. **Basic cleanup first**: Start with `trim_whitespace`, `collapse_spaces`, `remove_control_chars`, `remove_zero_width`
-3. **Unicode processing**: Use `unicode_normalization` and `fullwidth_to_halfwidth` for international text
-4. **HTML handling**: Use `whitelist_html` for rich text, `strip_html` for plain text
-5. **Length control last**: Place `visible_ratio_guard` and `truncate_length` at the end
-
-For detailed parameter information and more examples, see the [Pipeline Guide](PIPELINE_GUIDE.md).
-
-## Preset Configurations
-
-### Level-based Presets
-
-#### `safe` Preset
-Default preset suitable for most normal text input fields. Includes basic text sanitization features.
-
-#### `strict` Preset
-More restrictive filtering mode with stricter rules:
-- No emoji characters allowed
-- Converts all punctuation to half-width
-- Higher visible character ratio requirement (0.8)
-- Shorter text length limit (5000)
-
-### Function-specific Presets (Examples)
-
-#### `username` Preset
-Suitable for username input with stricter normalization.
-
-#### `nickname` Preset
-Suitable for user nicknames with emoji and Chinese punctuation support.
-
-#### `rich_text` Preset
-Suitable for rich text content, preserving safe HTML tags.
-
-## Extended Features
-
-### Register Custom Pipeline Steps
-
-```php
-use Overtrue\TextGuard\TextGuard;
-
-// Register custom step
-TextGuard::registerPipelineStep('custom_step', YourCustomPipeline::class);
-
-// Use in preset
-$clean = TextGuard::filter($dirty, 'custom', [
-    'custom_step' => ['option' => 'value']
-]);
-```
-
-### Get Available Steps
-
-```php
-$availableSteps = TextGuard::getAvailableSteps();
-// Returns: ['trim_whitespace', 'collapse_spaces', 'remove_control_chars', ...]
-```
-
-### Create Custom Pipeline Steps
-
-```php
-use Overtrue\TextGuard\Pipeline\PipelineStep;
-
-class CustomStep implements PipelineStep
-{
-    public function __construct(protected array $options = []) {}
-
-    public function __invoke(string $text): string
-    {
-        // Your custom logic
-        return $text;
-    }
-}
-```
-
-### Constructor Configuration
-
-All Pipeline steps now use constructor configuration, following traditional OOP design:
-
-```php
-// config/text-guard.php
-return [
-    'pipeline_map' => [
-        // Simplified syntax: use class names directly
-        'trim_whitespace' => \Overtrue\TextGuard\Pipeline\TrimWhitespace::class,
-        'strip_html' => \Overtrue\TextGuard\Pipeline\StripHtml::class,
-    ],
-
-    'presets' => [
-        'safe' => [
-            // Boolean configuration: enable feature
-            'trim_whitespace' => true,
-
-            // String configuration: pass to constructor
-            'unicode_normalization' => 'NFKC',
-
-            // Array configuration: pass to constructor
-            'truncate_length' => ['max' => 100],
-        ],
-    ],
-];
-```
-
-### Configuration Passing Mechanism
-
-The system automatically passes configuration to constructors based on type:
-
-- `true` → No parameter constructor `new Class()`
-- `'NFKC'` → Single parameter constructor `new Class('NFKC')`
-- `['max' => 100]` → Array parameter constructor `new Class(['max' => 100])`
-
-## Real-world Usage Scenarios
-
-### User Registration Form
-
-```php
-// Clean nickname during user registration
-class RegisterRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('nickname')) {
-            $this->merge([
-                'nickname' => TextGuard::filter(
-                    (string)$this->input('nickname'),
-                    'username'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'nickname' => ['required', 'string', 'max:20', new Sanitized(0.9, 1)],
-            'email' => ['required', 'email'],
-        ];
-    }
-}
-
-// Processing result:
-// Input: "  ＵｓｅｒＮａｍｅ１２３！！！  "
-// Output: "UserName123!!"
-```
-
-### Article Content Management
-
-```php
-// Clean content when publishing articles
-class ArticleRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('content')) {
-            $this->merge([
-                'content' => TextGuard::filter(
-                    (string)$this->input('content'),
-                    'rich_text'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'title' => ['required', 'string', new Filtered('safe')],
-            'content' => ['required', 'string', new Sanitized(0.8, 10)],
-        ];
-    }
-}
-
-// Processing result:
-// Input: "<p>Hello <script>alert('xss')</script> World</p>"
-// Output: "<p>Hello  World</p>"
-```
-
-### Comment System
-
-```php
-// Clean content when submitting comments
-class CommentRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('content')) {
-            $this->merge([
-                'content' => TextGuard::filter(
-                    (string)$this->input('content'),
-                    'safe'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'content' => ['required', 'string', 'max:500', new Sanitized(0.7, 1)],
-        ];
-    }
-}
-
-// Processing result:
-// Input: "  Great article!!!👍👍👍   "
-// Output: "Great article!!👍👍👍"
-```
-
-### Search Keyword Processing
-
-```php
-// Clean keywords during search
-class SearchController extends Controller
-{
-    public function search(Request $request)
-    {
-        $keyword = TextGuard::filter($request->input('q', ''), 'safe');
-
-        if (empty($keyword)) {
-            return redirect()->back()->with('error', 'Please enter a valid search term');
-        }
-
-        $results = $this->searchService->search($keyword);
-
-        return view('search.results', compact('results', 'keyword'));
-    }
-}
-
-// Processing result:
-// Input: "  Laravel Framework  "
-// Output: "Laravel Framework"
-```
-
-### Batch Data Processing
-
-```php
-// Clean user data during batch import
-class UserImportService
-{
-    public function importUsers(array $users): void
-    {
-        foreach ($users as $user) {
-            $cleanUser = [
-                'name' => TextGuard::filter($user['name'], 'safe'),
-                'email' => TextGuard::filter($user['email'], 'safe'),
-                'bio' => TextGuard::filter($user['bio'] ?? '', 'rich_text'),
-            ];
-
-            User::create($cleanUser);
-        }
-    }
-}
-```
-
-### Custom Pipeline Steps
-
-```php
-// Create custom sensitive word filtering step
-class SensitiveWordFilter implements PipelineStep
-{
-    public function __construct(protected array $sensitiveWords = []) {}
-
-    public function __invoke(string $text): string
-    {
-        foreach ($this->sensitiveWords as $word) {
-            $text = str_ireplace($word, str_repeat('*', mb_strlen($word)), $text);
-        }
-
-        return $text;
-    }
-}
-
-// Register and use
-TextGuard::registerPipelineStep('sensitive_filter', SensitiveWordFilter::class);
-
-$clean = TextGuard::filter($dirty, 'custom', [
-    'sensitive_filter' => ['sensitiveWords' => ['badword1', 'badword2']]
-]);
-```
-
-## Features
-
-- Whitespace handling (trim, collapse spaces)
-- Control character removal
-- Zero-width character removal
-- Unicode normalization
-- Full-width to half-width conversion
-- Punctuation normalization
-- HTML tag processing
-- Repeated punctuation collapsing
-- Visibility checking
-- Length truncation
-- Extensible pipeline architecture
-- Runtime custom step registration
-- Emoji support
-- Chinese punctuation support
-- Character whitelist filtering
-
-## Testing
-
-```bash
-composer test
-```
-
-## Code Quality
-
-This project follows strict code quality standards:
-
-```bash
-# Format code
+~~~bash
+composer install
 composer fix
-
-# Run tests
 composer test
-```
+~~~
 
-## License
-
-MIT License
+MIT License.

@@ -13,7 +13,7 @@ class FeatureTest extends TestCase
         $dirtyText = '  Hello   World  '.json_decode('"\u200B"').'  ';
         $cleanText = TextGuard::filter($dirtyText);
 
-        $this->assertEquals('Hello World ', $cleanText);
+        $this->assertEquals('Hello World', $cleanText);
     }
 
     public function test_username_preset()
@@ -30,8 +30,8 @@ class FeatureTest extends TestCase
             'nickname' => [new Filtered('safe')],
         ]);
 
-        $this->assertTrue($validator->passes());
-        $this->assertEquals('Test ', request()->input('nickname'));
+        $this->assertFalse($validator->passes());
+        $this->assertTrue($validator->errors()->has('nickname'));
     }
 
     public function test_sanitized_rule()

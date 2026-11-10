@@ -3,6 +3,7 @@
 namespace Overtrue\TextGuard;
 
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 
 /**
  * TextGuardable trait provides automatic text filtering for model attributes
@@ -118,49 +119,16 @@ trait TextGuardable
         }
     }
 
-    /**
-     * Get valid preset names from configuration
-     */
-    protected function getValidPresets(): array
-    {
-        $config = config('text-guard.presets', []);
-
-        return array_keys($config);
-    }
-
-    /**
-     * Normalize text guard fields configuration to field => preset mapping
-     */
     protected function normalizeTextGuardFields(): array
     {
         $fields = [];
-        $textGuardFields = $this->getTextGuardFields();
         $defaultPreset = $this->getTextGuardDefaultPreset();
 
-        // If it's an indexed array format (list), each field uses the default preset
-        if (array_is_list($textGuardFields)) {
-            foreach ($textGuardFields as $field) {
-                $fields[$field] = $defaultPreset;
+        foreach ($this->getTextGuardFields() as $key => $value) {
+            if (! is_string($value)) {
+                throw new InvalidArgumentException('Text guard fields must contain field names or preset names.');
             }
-
-            return $fields;
-        }
-
-        // If it's a mixed configuration, special handling is needed
-        foreach ($textGuardFields as $key => $value) {
-            if (is_numeric($key)) {
-                // This is a value in the indexed array, used as field name with default preset
-                $fields[$value] = $defaultPreset;
-            } else {
-                // This is a key-value pair in the associative array
-                if (is_string($value) && in_array($value, $this->getValidPresets(), true)) {
-                    // The value is a valid preset name
-                    $fields[$key] = $value;
-                } else {
-                    // The value is not a preset name, use default preset
-                    $fields[$key] = $defaultPreset;
-                }
-            }
+            $fields[is_int($key) ? $value : $key] = is_int($key) ? $defaultPreset : $value;
         }
 
         return $fields;

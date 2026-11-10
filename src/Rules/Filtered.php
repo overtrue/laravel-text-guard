@@ -10,7 +10,8 @@ class Filtered implements ValidationRule
 {
     public function __construct(
         protected string $preset = 'safe',
-        protected bool $mustNotBeEmpty = true
+        protected bool $mustNotBeEmpty = true,
+        protected array $overrides = []
     ) {}
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
@@ -21,13 +22,17 @@ class Filtered implements ValidationRule
             return;
         }
 
-        $clean = TextGuard::filter($value, $this->preset);
+        if (! mb_check_encoding($value, 'UTF-8')) {
+            $fail(':attribute must be valid UTF-8.');
 
-        // Write cleaned result back: let controller get clean value directly
-        request()->merge([$attribute => $clean]);
+            return;
+        }
 
-        if ($this->mustNotBeEmpty && mb_strlen(trim($clean)) === 0) {
+        $clean = TextGuard::filter($value, $this->preset, $this->overrides);
+        if ($this->mustNotBeEmpty && trim($clean) === '') {
             $fail(':attribute is empty after filtering.');
+        } elseif ($clean !== $value) {
+            $fail(':attribute does not match the configured text pipeline.');
         }
     }
 }

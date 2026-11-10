@@ -1,424 +1,104 @@
-# Laravel TextGuard Pipeline Usage Guide
+# Pipeline reference
 
-This document provides detailed information about all Pipeline steps in the Laravel TextGuard package, including usage, parameter configuration, and default values.
+[中文](PIPELINE_GUIDE.zh-CN.md) · [Usage and migration](README.md)
 
-## Table of Contents
+## Composition contract
 
-- [Basic Pipelines](#basic-pipelines)
-- [Unicode Processing Pipelines](#unicode-processing-pipelines)
-- [HTML Processing Pipelines](#html-processing-pipelines)
-- [Character Filtering Pipelines](#character-filtering-pipelines)
-- [Length Control Pipelines](#length-control-pipelines)
-- [Configuration Examples](#configuration-examples)
+`TextGuard::pipe($text, $steps)` executes the supplied steps in insertion order. `filter($text, $preset, $overrides)` resolves a preset and delegates to the same executor. `validate()` checks whether that pipeline leaves the text unchanged. All custom steps participate automatically.
 
-## Basic Pipelines
+Configuration is either `true` (default constructor), `false` (disabled), a string (single constructor argument), or an array (options passed intact, including `[]`). Unknown names and invalid top-level configuration types throw. Register a class under multiple names to repeat it. Registrations describe availability, not execution order.
 
-### 1. TrimWhitespace - Remove Leading/Trailing Whitespace
+Overrides retain existing step positions and append new steps. Associative option dictionaries merge recursively; lists replace atomically. In particular, a shorter HTML allowlist must not retain trailing entries from the previous list. Use a complete `pipe()` configuration when order changes.
 
-**Function**: Removes leading and trailing whitespace characters (including full-width spaces)
+## Built-in steps
 
-**Parameters**: None
+| Step | Options / defaults | Responsibility |
+| --- | --- | --- |
+| `trim_whitespace` | none | Remove leading/trailing Unicode whitespace |
+| `collapse_spaces` | none | Collapse consecutive whitespace |
+| `remove_control_chars` | none | Remove ASCII controls except tab, LF and CR |
+| `remove_zero_width` | `preserve_joiners: false` | Remove U+200B/U+200C/U+200D/U+FEFF/U+2060; optionally preserve U+200C/U+200D |
+| `remove_bidi_controls` | none | Remove U+061C/U+200E/U+200F/U+202A–U+202E/U+2066–U+2069 |
+| `unicode_normalization` | string `NFKC` | NFC/NFD/NFKC/NFKD normalization |
+| `fullwidth_to_halfwidth` | `ascii: true, digits: true, latin: true, punct: false` | Existing mb_convert_kana flags: a/n/r/s respectively; flags overlap, and s converts fullwidth spaces |
+| `normalize_punctuations` | string `zh` | Map punctuation to `zh` or `en` conventions |
+| `html_decode` | `enabled: true, flags: ENT_QUOTES \| ENT_HTML5, encoding: UTF-8` | Decode HTML entities once |
+| `strip_html` | none | Strip HTML tags, leaving text content |
+| `whitelist_html` | see below | DOM-based tag/attribute/protocol allowlists |
+| `character_whitelist` | see below | Keep permitted text and optionally complete emoji sequences |
+| `collapse_repeated_marks` | `max_repeat: 2, charset: '!?。，、…—'` | Limit runs of selected punctuation |
+| `visible_ratio_guard` | `min_ratio: 0.6` | Return empty string if the current text fails a code-point visibility heuristic |
+| `truncate_length` | `max: 5000, unit: codepoint` | Limit code points or grapheme clusters |
 
-**Default Values**: None
+Use `false` to disable a step through configuration. Nullable direct constructors for Unicode/punctuation normalization remain available, but `null` is not a pipeline configuration value.
 
-**Usage Example**:
-```php
-// Configuration
-'trim_whitespace' => true
+## Unicode operations
 
-// Effect
-"  Hello World  " → "Hello World"
-"　Chinese Content　" → "Chinese Content"
-```
-
-### 2. CollapseSpaces - Collapse Multiple Spaces
-
-**Function**: Collapses multiple consecutive whitespace characters into a single space
-
-**Parameters**: None
-
-**Default Values**: None
-
-**Usage Example**:
-```php
-// Configuration
-'collapse_spaces' => true
-
-// Effect
-"Hello    World" → "Hello World"
-"Multiple    Spaces" → "Multiple Spaces"
-```
-
-### 3. RemoveControlChars - Remove Control Characters
-
-**Function**: Removes control characters while preserving newlines and tabs
-
-**Parameters**: None
-
-**Default Values**: None
-
-**Usage Example**:
-```php
-// Configuration
-'remove_control_chars' => true
-
-// Effect
-"Hello\x00World" → "HelloWorld"
-"Text\x1F\x7F" → "Text"
-```
-
-### 4. RemoveZeroWidth - Remove Zero-Width Characters
-
-**Function**: Removes zero-width characters (U+200B..200D, U+FEFF)
-
-**Parameters**: None
-
-**Default Values**: None
-
-**Usage Example**:
-```php
-// Configuration
-'remove_zero_width' => true
-
-// Effect
-"Hello\u{200B}World" → "HelloWorld"
-"Text\u{FEFF}" → "Text"
-```
-
-## Unicode Processing Pipelines
-
-### 5. NormalizeUnicode - Unicode Normalization
-
-**Function**: Performs Unicode normalization on text
-
-**Parameters**:
-- `form` (string|null): Normalization form, defaults to `'NFKC'`
-
-**Available Values**:
-- `'NFC'`: Canonical Decomposition, followed by Canonical Composition
-- `'NFD'`: Canonical Decomposition
-- `'NFKC'`: Compatibility Decomposition, followed by Canonical Composition
-- `'NFKD'`: Compatibility Decomposition
-- `null`: Disable normalization
-
-**Usage Example**:
-```php
-// Configuration
-'unicode_normalization' => 'NFKC'
-
-// Effect
-"café" → "café" (normalized)
-"①" → "1" (compatibility decomposition)
-```
-
-### 6. FullwidthToHalfwidth - Convert Fullwidth to Halfwidth
-
-**Function**: Converts fullwidth characters to halfwidth characters
-
-**Parameters**:
-- `ascii` (bool): Convert fullwidth ASCII characters, default `true`
-- `digits` (bool): Convert fullwidth digits, default `true`
-- `latin` (bool): Convert fullwidth Latin letters, default `true`
-- `punct` (bool): Convert fullwidth punctuation, default `false`
-
-**Usage Example**:
-```php
-// Configuration
-'fullwidth_to_halfwidth' => [
-    'ascii' => true,
-    'digits' => true,
-    'latin' => true,
-    'punct' => false, // Preserve Chinese punctuation
-]
-
-// Effect
-"Ｈｅｌｌｏ　Ｗｏｒｌｄ！" → "Hello World！"
-"１２３４５" → "12345"
-```
-
-### 7. NormalizePunctuations - Normalize Punctuation
-
-**Function**: Normalizes punctuation based on locale
-
-**Parameters**:
-- `locale` (string|null): Locale, defaults to `'zh'`
-
-**Available Values**:
-- `'zh'`: Convert English punctuation to Chinese punctuation
-- `'en'`: Convert Chinese punctuation to English punctuation
-- `null`: Disable normalization
-
-**Usage Example**:
-```php
-// Configuration
-'normalize_punctuations' => 'zh'
-
-// Effect (zh mode)
-"Hello, World!" → "Hello，World！"
-
-// Configuration
-'normalize_punctuations' => 'en'
-
-// Effect (en mode)
-"Hello，World！" → "Hello, World!"
-```
-
-## HTML Processing Pipelines
-
-### 8. StripHtml - Remove HTML Tags
-
-**Function**: Removes all HTML tags
-
-**Parameters**: None
-
-**Default Values**: None
-
-**Usage Example**:
-```php
-// Configuration
-'strip_html' => true
-
-// Effect
-"<p>Hello <b>World</b></p>" → "Hello World"
-"<script>alert('xss')</script>" → "alert('xss')"
-```
-
-### 9. HtmlDecode - Decode HTML Entities
-
-**Function**: Decodes HTML entities
-
-**Parameters**:
-- `enabled` (bool): Whether to enable, default `true`
-- `flags` (int): Decode flags, default `ENT_QUOTES | ENT_HTML5`
-- `encoding` (string): Encoding format, default `'UTF-8'`
-
-**Usage Example**:
-```php
-// Configuration
-'html_decode' => true
-
-// Effect
-"&lt;script&gt;" → "<script>"
-"&amp;&quot;" → "&""
-```
-
-### 10. WhitelistHtml - HTML Whitelist Filtering
-
-**Function**: Keeps only allowed HTML tags and attributes
-
-**Parameters**:
-- `tags` (array): Allowed tags list, default `['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3']`
-- `attrs` (array): Allowed attributes list, default `['href', 'title', 'rel']`
-- `protocols` (array): Allowed protocols list, default `['http', 'https', 'mailto']`
-
-**Usage Example**:
-```php
-// Configuration
-'whitelist_html' => [
-    'tags' => ['p', 'b', 'i', 'a'],
-    'attrs' => ['href'],
-    'protocols' => ['http', 'https'],
-]
-
-// Effect
-"<p><b>Hello</b> <a href='http://example.com'>World</a></p>" → Preserved
-"<script>alert('xss')</script>" → Removed
-"<a href='javascript:alert(1)'>Link</a>" → href attribute removed
-```
-
-## Character Filtering Pipelines
-
-### 11. CharacterWhitelist - Character Whitelist Filtering
-
-**Function**: Keeps only allowed character types
-
-**Parameters**:
-- `enabled` (bool): Whether to enable, default `true`
-- `allow_emoji` (bool): Whether to allow emoji, default `true`
-- `allow_chinese_punctuation` (bool): Whether to allow Chinese punctuation, default `true`
-- `allow_english_punctuation` (bool): Whether to allow English punctuation, default `true`
-- `emoji_ranges` (array): Emoji range configuration
-  - `emoticons` (bool): Emoticons, default `true`
-  - `misc_symbols` (bool): Miscellaneous symbols, default `true`
-  - `transport_map` (bool): Transport symbols, default `true`
-  - `misc_symbols_2` (bool): Miscellaneous symbols 2, default `true`
-  - `dingbats` (bool): Decorative symbols, default `true`
-
-**Usage Example**:
-```php
-// Configuration
-'character_whitelist' => [
-    'enabled' => true,
-    'allow_emoji' => true,
-    'allow_chinese_punctuation' => true,
-    'allow_english_punctuation' => true,
-    'emoji_ranges' => [
-        'emoticons' => true,
-        'misc_symbols' => false,
-        'transport_map' => false,
-        'misc_symbols_2' => false,
-        'dingbats' => false,
-    ],
-]
-
-// Effect
-"Hello World! 😊" → "Hello World! 😊" (preserved)
-"Hello World! 🚗" → "Hello World! " (transport symbol removed)
-```
-
-### 12. CollapseRepeatedMarks - Collapse Repeated Punctuation
-
-**Function**: Limits the maximum repetition count of repeated punctuation marks
-
-**Parameters**:
-- `max_repeat` (int): Maximum repetition count, default `2`
-- `charset` (string): Character set to process, default `'!?。，、…—'`
-
-**Usage Example**:
-```php
-// Configuration
-'collapse_repeated_marks' => [
-    'max_repeat' => 1,
-    'charset' => '_-.',
-]
-
-// Effect
-"Hello!!!" → "Hello!!" (limited to 2)
-"Hello___World" → "Hello_World" (limited to 1)
-```
-
-## Length Control Pipelines
-
-### 13. VisibleRatioGuard - Visible Character Ratio Check
-
-**Function**: Checks visible character ratio, returns empty string if below threshold
-
-**Parameters**:
-- `min_ratio` (float): Minimum visible character ratio, default `0.6`
-
-**Usage Example**:
-```php
-// Configuration
-'visible_ratio_guard' => ['min_ratio' => 0.8]
-
-// Effect
-"Hello World" → "Hello World" (ratio > 0.8)
-"Hello\u{200B}\u{200B}\u{200B}World" → "" (ratio < 0.8)
-```
-
-### 14. TruncateLength - Length Truncation
-
-**Function**: Truncates text that exceeds maximum length
-
-**Parameters**:
-- `max` (int): Maximum length, default `5000`
-
-**Usage Example**:
-```php
-// Configuration
-'truncate_length' => ['max' => 100]
-
-// Effect
-"Hello World" → "Hello World" (length < 100)
-"Very long text..." → "Very long text..." (truncated to 100 characters)
-```
-
-## Configuration Examples
-
-### Basic Text Processing
-```php
-'basic_text' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'strip_html' => true,
-    'visible_ratio_guard' => ['min_ratio' => 0.6],
-    'truncate_length' => ['max' => 1000],
-],
-```
-
-### Username Processing
-```php
-'username' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
-    'normalize_punctuations' => 'en',
-    'strip_html' => true,
-    'collapse_repeated_marks' => [
-        'max_repeat' => 1,
-        'charset' => '_-.',
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.9],
-    'truncate_length' => ['max' => 50],
-],
-```
-
-### Rich Text Processing
-```php
-'rich_text' => [
-    'trim_whitespace' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
+~~~php
+TextGuard::pipe($text, [
     'unicode_normalization' => 'NFC',
-    'whitelist_html' => [
-        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
-        'attrs' => ['href', 'title', 'rel'],
-        'protocols' => ['http', 'https', 'mailto'],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.5],
-    'truncate_length' => ['max' => 20000],
-],
-```
+    'remove_bidi_controls' => true,
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'truncate_length' => ['max' => 40, 'unit' => 'grapheme'],
+]);
+~~~
 
-### Strict Mode
-```php
-'strict' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
+These are separate decisions. Bidi controls are not all RTL text. Joiners carry meaning in Persian/Indic text and emoji; preserving them does not certify their placement. A whitelist applied later may still remove them.
+
+`truncate_length` accepts a non-negative integer maximum and `codepoint` or `grapheme`. Zero returns empty text. Graphemes use the already-required intl extension; no new dependency is added. ICU determines segmentation. The input must be valid UTF-8. Neither mode understands HTML structure or display-column width.
+
+Visibility ratios count code points, including non-visible joining characters. They are not a measure of visual authenticity and can reject legitimate emoji or writing systems. Do not add them automatically to every pipeline.
+
+## Character whitelist
+
+Options:
+
+- `enabled: true`
+- `allow_emoji: true`
+- `allow_chinese_punctuation: true`
+- `allow_english_punctuation: true`
+
+The ordinary character whitelist retains word characters, Han and whitespace plus selected punctuation. It is not a configurable identity/filename policy. Emoji matching handles pictographic sequences (including ZWJ/modifiers), regional-indicator pairs, keycaps and tag sequences as units. It uses Unicode properties rather than historical hand-maintained blocks, but is not an RGI validator. Unicode property availability follows PCRE; grapheme segmentation follows runtime Unicode data.
+
+`emoji_ranges` is removed and throws if supplied. To restrict particular symbols, register a separate application-owned step; do not assume Unicode blocks correspond to semantic categories.
+
+~~~php
+TextGuard::pipe($text, [
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'character_whitelist' => ['allow_emoji' => true],
+    'truncate_length' => ['max' => 30, 'unit' => 'grapheme'],
+]);
+~~~
+
+## HTML options and ordering
+
+`whitelist_html` defaults:
+
+~~~php
+[
+    'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
+    'attrs' => ['href', 'title', 'rel'],
+    'protocols' => ['http', 'https', 'mailto'],
+]
+~~~
+
+Each list replaces its default in full; `[]` clears it. ext-dom is required; missing support throws instead of falling back to a weaker implementation. Keep allowlists trusted and narrow. This is not a replacement for a dedicated rich-text sanitizer with a broader threat model.
+
+For plain text with encoded markup:
+
+~~~php
+TextGuard::pipe('&lt;b&gt;Hello&lt;/b&gt;', [
     'html_decode' => true,
     'strip_html' => true,
-    'character_whitelist' => [
-        'enabled' => true,
-        'allow_emoji' => false,
-        'allow_chinese_punctuation' => true,
-        'allow_english_punctuation' => true,
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.8],
-    'truncate_length' => ['max' => 5000],
-],
-```
+]); // Hello
+~~~
 
-## Usage Recommendations
+Reversing these steps produces `<b>Hello</b>` by design. This illustrates why order belongs to the caller, not the registry. Entity decoding is one pass, not a promise of recursive canonicalization. `strip_html` leaves script text, and neither operation replaces contextual output escaping.
 
-1. **Basic Text**: Use `trim_whitespace`, `collapse_spaces`, `remove_control_chars`, `remove_zero_width` combination
-2. **Username**: Add `unicode_normalization`, `fullwidth_to_halfwidth`, `normalize_punctuations`
-3. **Nickname**: Allow emoji, use `character_whitelist` for control
-4. **Rich Text**: Use `whitelist_html` instead of `strip_html`
-5. **Strict Mode**: Disable emoji, increase visible character ratio requirements
+Do not run plain string truncation on sanitized HTML and assume the result remains structurally valid. Validate input size or use a DOM-aware step before final sanitization. Rendering to Markdown or an HTML attribute has different requirements from rendering plain text in an HTML text node.
 
-## Important Notes
+## Custom steps
 
-- Pipeline steps are executed in configuration order
-- Some steps may affect the results of subsequent steps
-- Recommend basic cleanup first, then special processing
-- Length control steps are usually placed last
-- Pay attention to Unicode character handling effects during testing
+Implement `PipelineStep::__invoke(string $text): string`, register with `registerPipelineStep($name, $class)`, then reference its name in a preset or `pipe()`. Arrays are passed to the constructor unchanged: a key named `value` has no special meaning. Steps should have no request, storage or rendering side effects.
+
+A custom detector can be composed with a custom replacer without adding phone/email/domain policy to the library. Test both transformed input and ordinary text that must remain unchanged, and test the final rendering separately from string transformations.

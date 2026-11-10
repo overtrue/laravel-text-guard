@@ -1,67 +1,175 @@
 # Laravel TextGuard
 
-TextGuard：可作 Rule 也可单用的字符串清洗/规范化工具
+可组合的 Laravel 字符串过滤工具，过滤与校验职责分离。
 
-[English Documentation](README.md) | [中文文档](README.zh-CN.md)
-
-## 文档
-
-- [Pipeline Guide](PIPELINE_GUIDE.md) - Complete guide to all pipeline steps
-- [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md) - 所有 pipeline 步骤的完整指南
+[English](README.md) · [Pipeline 参数参考](PIPELINE_GUIDE.zh-CN.md)
 
 ## 安装
 
-```bash
+需要 PHP 8.3+、Laravel 12/13、mbstring 和 intl。HTML 白名单过滤另需 ext-dom。
+
+~~~bash
 composer require overtrue/laravel-text-guard
-```
-
-## 发布配置文件
-
-```bash
 php artisan vendor:publish --tag=text-guard-config
-```
+~~~
 
-## 基本用法
+## 组合操作，而不是内置业务策略
 
-### 作为工具使用
+每个步骤只负责字符串到字符串的转换。重复使用的组合可命名为预设，也可以直接声明执行顺序：
 
-```php
+~~~php
 use Overtrue\TextGuard\TextGuard;
 
-// 使用默认 'safe' 预设
-$clean = TextGuard::filter($dirty);
-
-// 使用指定预设
-$clean = TextGuard::filter($dirty, 'username');
-
-// 覆盖配置
-$clean = TextGuard::filter($dirty, 'safe', [
-    'truncate_length' => ['max' => 100]
+$clean = TextGuard::pipe($input, [
+    'html_decode' => true,
+    'strip_html' => true,
+    'unicode_normalization' => 'NFC',
+    'remove_bidi_controls' => true,
+    'remove_zero_width' => ['preserve_joiners' => true],
+    'collapse_spaces' => true,
+    'trim_whitespace' => true,
+    'truncate_length' => ['max' => 80, 'unit' => 'grapheme'],
 ]);
-```
 
-### 作为验证规则使用
+$clean = TextGuard::filter($input, 'safe');
+$clean = TextGuard::filter($input, 'safe', ['truncate_length' => ['max' => 100]]);
+$cleanByKey = TextGuard::batchFilter(['title' => $input], 'safe');
+~~~
 
-```php
+步骤按传入顺序执行，不按注册表顺序执行。预设只是有名字的有序配置。工具不内置手机号阈值、域名后缀表、邮件专用替换或文件名策略。
+
+- `true` 使用默认构造参数；`false` 禁用步骤；字符串和数组（包括 `[]`）原样传入构造函数。
+- overrides 递归合并关联配置；列表整体替换，`[]` 可清空白名单。
+- 覆盖已有步骤不移动位置，新步骤追加到末尾。要改变顺序，使用 `pipe()` 或新预设。同一类注册成不同名称即可多次执行。
+- 未知预设/步骤、非法配置类型抛出 `InvalidArgumentException`。显式定义的空预设和 `pipe($input, [])` 原样返回文本。
+- `filter()` 和 `pipe()` 拒绝非法 UTF-8。配置必须来自可信应用代码，不接收用户提供的管道配置。
+
+不使用 Facade 时，可将配置数组传给 `TextGuardManager`。其字符串操作不读取 HTTP 请求。
+
+## 明确选择清洗还是拒绝
+
+过滤返回新字符串，不修改输入或 HTTP 请求。校验判断同一管道是否保持输入不变：
+
+~~~php
+$result = TextGuard::validate($input, 'safe'); // ['valid' => bool, 'errors' => array]
+
 use Overtrue\TextGuard\Rules\Filtered;
-use Overtrue\TextGuard\Rules\Sanitized;
 
-// 先过滤再验证
 $validator = validator($data, [
-    'nickname' => [new Filtered('username')]
+    'items.*.name' => ['required', 'string', new Filtered('safe')],
 ]);
+$accepted = $validator->validated();
+~~~
 
-// 仅验证可见度
+`Filtered` 拒绝需要清洗的值，不写入 `request()`，支持独立 Validator 和嵌套/通配字段。`mustNotBeEmpty: false` 允许原样的空字符串，不会允许需要被删除的空白。可选 `overrides` 参数与 `filter()` 一致。
+
+除非显式启用，本包**不会**改写 HTTP 请求。按需选择：
+
+| 目的 | 方式 |
+|------|------|
+| 在业务代码中过滤字符串 | `TextGuard::filter()` / `pipe()` |
+| 减少重复的 `prepareForValidation()` | `Request` / `FormRequest` 上的 `mergeFiltered([...])` |
+| 校验时过滤并让 `validated()` 拿到干净值 | `Sanitize` 规则（只改 Validator 数据） |
+| 拒绝仍需清洗的输入 | `Filtered` 规则（不变性检查） |
+| 在进入控制器前清洗指定路由字段 | 可选的 `text-guard.merge` 中间件 |
+
+### 请求上的 `mergeFiltered()`
+
+服务提供者启动后，所有 `Request` 均支持 `mergeFiltered(array $fieldPresets)`：键为字段模式，值为预设名。命中的合法 UTF-8 字符串会过滤并合并回**当前请求实例**。
+
+~~~php
+$request->mergeFiltered([
+    'name' => 'safe',
+    'bio' => 'nickname',
+    'items.*.title' => 'safe', // 通配符对 Arr::dot 后的路径做 Str::is 匹配
+]);
+~~~
+
+非字符串与非法 UTF-8 原样保留（不突然抛错）。未知预设与非法配置仍与 `filter()` 一样抛异常。
+
+`FormRequest` 中等价写法：
+
+~~~php
+protected function prepareForValidation(): void
+{
+    $this->mergeFiltered(['name' => 'safe', 'bio' => 'nickname']);
+}
+
+public function rules(): array
+{
+    return ['name' => ['required', 'string', new Filtered('safe')]];
+}
+~~~
+
+### `Sanitize` 与 `Filtered`
+
+`Sanitize` 按预设过滤，并把结果写入 **Validator 数据**，`validated()` 即为清洗后的值；不会调用 `request()->merge()`。
+
+~~~php
+use Overtrue\TextGuard\Rules\Sanitize;
+use Overtrue\TextGuard\Rules\Filtered;
+
 $validator = validator($data, [
-    'content' => [new Sanitized(0.8, 1)]
+    'nickname' => ['required', 'string', new Sanitize('username'), new Filtered('username')],
 ]);
-```
+$clean = $validator->validated();
+~~~
 
-### 模型自动过滤
+仅要求客户端提交已干净文本时使用 `Filtered`。需要自动清洗并仍做不变性检查时，可组合 `Sanitize` 与 `Filtered`。
 
-使用 `TextGuardable` trait 为模型字段提供自动过滤功能：
+### 可选路由中间件
 
-```php
+包仅注册别名 `text-guard.merge`，**不是全局中间件**。在需要的路由上挂载：
+
+~~~php
+Route::post('/profile', ...)
+    ->middleware('text-guard.merge:name:safe,bio:nickname');
+~~~
+
+参数为 `字段:预设`，只处理声明的字段。
+
+必填、可空、业务长度等条件由 Laravel 的 `required`、`nullable`、长度规则承担。非法类型/UTF-8 在 `Filtered` 中返回校验失败；配置错误仍抛异常。`Sanitized(minVisibleRatio: 0.6, minLength: 1)` 仅是**可见度启发式检查**，不保证文本已经清洗或可安全渲染。
+
+## Unicode 策略彼此独立
+
+- `remove_zero_width` 默认移除 U+200B/U+200C/U+200D/U+FEFF/U+2060。`preserve_joiners: true` 保留文字和 emoji 中的 ZWNJ/ZWJ，但不验证连接符的位置。
+- `remove_bidi_controls` 移除 Unicode Bidi_Control 字符，保留普通从右向左书写的文字和连接符。因为方向控制可能有合理用途，该步骤需显式启用。
+- `truncate_length` 默认按码点计数。`unit: grapheme` 按用户感知字符截断，保留组合附加符和 emoji 序列。`max: 0` 返回空字符串；非法最大值/单位抛异常。
+- `character_whitelist` 将图形 ZWJ 序列、肤色、区域指示符对、键帽、emoji tag 序列作为整体保留或删除。它不是 RGI emoji 校验器。识别依赖运行时 Unicode 数据；字素截断使用 ICU。
+
+`nickname` 示例预设保留连接符、按字素限长，不再套用码点可见度启发式检查。后续步骤仍可能改变前面的结果：保留连接符不代表绕过字符白名单。请按文本语言和用途组合操作。
+
+## 复用预设与扩展
+
+内置 `safe`、`strict`、`username`、`nickname`、`rich_text`。精确定义见 `config/text-guard.php`；名字只是便捷标签，不代表安全保证。
+
+~~~php
+use Overtrue\TextGuard\Pipeline\PipelineStep;
+
+class ReplaceText implements PipelineStep
+{
+    public function __construct(private array $replacements = []) {}
+
+    public function __invoke(string $text): string
+    {
+        return strtr($text, $this->replacements);
+    }
+}
+
+TextGuard::registerPipelineStep('replace_text', ReplaceText::class);
+$display = TextGuard::pipe($input, [
+    'strip_html' => true,
+    'replace_text' => ['[' => '(', ']' => ')'],
+]);
+~~~
+
+示例仅做字面替换，不是 HTML/Markdown 转义。业务特征识别和打码放在独立的自定义步骤；替换策略不应强制绑定规范化、存储或渲染方式。
+
+查询配置：`getAvailableSteps()`、`getAvailablePresets()`、`getPresetConfig($name)`。
+
+## Eloquent 集成必须显式启用
+
+~~~php
 use Illuminate\Database\Eloquent\Model;
 use Overtrue\TextGuard\TextGuardable;
 
@@ -69,532 +177,42 @@ class User extends Model
 {
     use TextGuardable;
 
-    protected $fillable = ['name', 'bio', 'description'];
-
-    // 方式1：关联数组（指定不同预设）
-    protected $textGuardFields = [
-        'name' => 'username',        // 用户名使用更严格的过滤
-        'bio' => 'safe',             // 简介使用安全过滤
-        'description' => 'rich_text' // 描述允许富文本
-    ];
-
-    // 方式2：索引数组（使用默认预设）
-    protected $textGuardFields = ['name', 'bio', 'description'];
-    protected $textGuardDefaultPreset = 'safe';
-
-    // 方式3：混合配置（部分字段使用默认预设，部分指定预设）
-    protected $textGuardFields = [
-        'name',  // 使用默认预设
-        'bio' => 'safe',  // 指定预设
-        'description' => 'rich_text'  // 指定预设
-    ];
-    protected $textGuardDefaultPreset = 'username';
+    protected $textGuardFields = ['name' => 'nickname', 'bio' => 'safe'];
 }
-```
+~~~
 
-当模型保存时，指定的字段会自动进行过滤：
+保存时只处理已配置、dirty 且非 null 的字段。字段名列表使用 `getTextGuardDefaultPreset()`；关联项指定预设，支持混合配置。未知预设抛异常，不再静默回退。
 
-```php
-$user = new User();
-$user->fill([
-    'name' => 'ＵｓｅｒＮａｍｅ１２３！！！',  // 全角字符
-    'bio' => '正常文本' . json_decode('"\u200B"') . '隐藏内容',  // 零宽字符
-    'description' => '<script>alert("XSS")</script><p>正常内容</p>',  // HTML
-]);
-$user->save();
+可以覆盖 `getTextGuardFields()` / `getTextGuardDefaultPreset()` 代替属性。`filterField($field, $preset)` 返回过滤值，不赋值；`getTextGuardFieldNames()` 返回规范化字段名。`disableTextGuard()` / `enableTextGuard()` 影响进程内全部模型；`withoutTextGuard($callback)` 无论成功或异常都恢复原状态。不要跨并发请求使用进程级开关。
 
-// 保存后数据已被自动过滤：
-// $user->name = 'UserName123!!!'  // 全角转半角
-// $user->bio = '正常文本隐藏内容'  // 零宽字符被移除
-// $user->description = '<p>正常内容</p>'  // 危险标签被移除，保留安全标签
-```
+仅用于展示的打码不应持久化覆盖原值，除非这就是明确意图。
 
-#### 动态管理过滤字段
+## 渲染与组合边界
 
-```php
-$user = new User();
+`strip_html` 是去标签，不是输出上下文转义。`html_decode` 只解码一轮；如果输入契约需要解码后去标签，就显式按此顺序执行，不要隐式反复解码到稳定。任意管道不保证幂等。
 
+HTML/属性/JavaScript/Markdown 分别在输出边界转义。HTML 白名单过滤缺少 ext-dom 时明确失败，不降级到保留属性的去标签函数。白名单整体替换默认列表。清洗后再解码或规范化 HTML，需要重新评估最终输出。普通字符串截断不理解 DOM；富文本应拒绝超长输入，或在最终清洗前使用理解 DOM 的截断步骤。
 
-// 手动过滤字段
-$filtered = $user->filterField('bio', 'safe');
+## 升级：破坏性变化
 
-// 获取当前配置
-$fields = $user->getTextGuardFields(); // 返回过滤字段配置
-$fields = $user->getTextGuardFields(); // 返回字段列表
-```
+本次设计调整需要破坏性版本发布：
 
-### 与 FormRequest 集成
+1. 按预设顺序执行。检查依赖 `pipeline_map` 顺序的配置；先解码再去标签现已符合文档。
+2. `Filtered` 不再清洗全局请求，而是拒绝脏输入；有意清洗可使用 `mergeFiltered()`、`Sanitize` 或显式 `TextGuard::filter()` / `prepareForValidation()`。
+3. 新增可选能力（`mergeFiltered()`、`Sanitize`、`text-guard.merge` 中间件）仅在调用或挂载时生效。
+4. `validate()` 校验完整管道，包括自定义步骤，不再维护硬编码子集。显式空预设有效。
+5. 未知名称、非法步骤类型、非法 UTF-8 明确失败。使用 `false` 而非 `null`/`0` 禁用步骤；`[]` 表示启用默认参数。
+6. 数字索引列表整体替换，不递归合并；检查已发布的白名单。模型预设拼写错误不再回退。
+7. 从已发布配置移除 `emoji_ranges`。`allow_emoji` 改为识别 Unicode 序列；旧区间参数抛异常。特定符号限制使用自定义步骤。
+8. `nickname` 改为按字素计数、保留连接符、去掉可见度启发式检查。其他预设保留原有字符和长度策略。内置预设统一在末尾去除首尾空白，避免去标签、去零宽字符或截断后残留空白。
+9. HTML 白名单过滤必须有 ext-dom，不再静默降级。
 
-```php
-class UpdateProfileRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('nickname')) {
-            $this->merge([
-                'nickname' => TextGuard::filter(
-                    (string)$this->input('nickname'),
-                    'username'
-                ),
-            ]);
-        }
-    }
+## 开发
 
-    public function rules(): array
-    {
-        return [
-            'nickname' => ['required', 'string', new Sanitized(0.9, 1)],
-            'bio' => ['nullable', new Filtered('safe', false)],
-        ];
-    }
-}
-```
-
-## Pipeline 使用
-
-Laravel TextGuard 提供了 14 个内置的 pipeline 步骤用于文本处理。每个 pipeline 步骤都可以配置特定参数以满足不同需求。
-
-### 可用的 Pipeline 步骤
-
-#### 基础文本处理
-- **`trim_whitespace`** - 去除首尾空白字符（包括全角空格）
-- **`collapse_spaces`** - 合并多个连续空格为单个空格
-- **`remove_control_chars`** - 移除控制字符（保留换行符和制表符）
-- **`remove_zero_width`** - 移除零宽字符（U+200B..200D, U+FEFF）
-
-#### Unicode 处理
-- **`unicode_normalization`** - Unicode 规范化（NFC, NFD, NFKC, NFKD）
-- **`fullwidth_to_halfwidth`** - 全角字符转半角字符
-- **`normalize_punctuations`** - 根据语言环境规范化标点符号（zh/en）
-
-#### HTML 处理
-- **`strip_html`** - 移除所有 HTML 标签
-- **`html_decode`** - 解码 HTML 实体
-- **`whitelist_html`** - 只保留允许的 HTML 标签和属性
-
-#### 字符过滤
-- **`character_whitelist`** - 只保留允许的字符类型（支持表情符号）
-- **`collapse_repeated_marks`** - 限制重复标点符号
-
-#### 长度控制
-- **`visible_ratio_guard`** - 检查可见字符比例
-- **`truncate_length`** - 截断文本到最大长度
-
-### Pipeline 配置示例
-
-#### 基础文本清理
-```php
-'basic_clean' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'strip_html' => true,
-    'visible_ratio_guard' => ['min_ratio' => 0.6],
-    'truncate_length' => ['max' => 1000],
-],
-```
-
-#### 用户名处理
-```php
-'username' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => true,
-    ],
-    'normalize_punctuations' => 'en',
-    'strip_html' => true,
-    'collapse_repeated_marks' => [
-        'max_repeat' => 1,
-        'charset' => '_-.',
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.9],
-    'truncate_length' => ['max' => 50],
-],
-```
-
-#### 富文本处理
-```php
-'rich_text' => [
-    'trim_whitespace' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFC',
-    'whitelist_html' => [
-        'tags' => ['p', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'br', 'blockquote', 'h1', 'h2', 'h3'],
-        'attrs' => ['href', 'title', 'rel'],
-        'protocols' => ['http', 'https', 'mailto'],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.5],
-    'truncate_length' => ['max' => 20000],
-],
-```
-
-#### 支持表情符号的昵称
-```php
-'nickname' => [
-    'trim_whitespace' => true,
-    'collapse_spaces' => true,
-    'remove_control_chars' => true,
-    'remove_zero_width' => true,
-    'unicode_normalization' => 'NFKC',
-    'fullwidth_to_halfwidth' => [
-        'ascii' => true,
-        'digits' => true,
-        'latin' => true,
-        'punct' => false, // 保留中文标点
-    ],
-    'html_decode' => true,
-    'strip_html' => true,
-    'character_whitelist' => [
-        'enabled' => true,
-        'allow_emoji' => true,
-        'allow_chinese_punctuation' => true,
-        'allow_english_punctuation' => true,
-        'emoji_ranges' => [
-            'emoticons' => true,
-            'misc_symbols' => true,
-            'transport_map' => true,
-            'misc_symbols_2' => true,
-            'dingbats' => true,
-        ],
-    ],
-    'visible_ratio_guard' => ['min_ratio' => 0.7],
-    'truncate_length' => ['max' => 30],
-],
-```
-
-### Pipeline 参数类型
-
-系统根据类型自动传递配置给构造函数：
-
-- **布尔值** (`true`/`false`) → 无参数构造函数：`new Class()`
-- **字符串值** (`'NFKC'`) → 单参数构造函数：`new Class('NFKC')`
-- **数组值** (`['max' => 100]`) → 数组参数构造函数：`new Class(['max' => 100])`
-
-### 使用技巧
-
-1. **顺序很重要**：Pipeline 步骤按配置顺序执行
-2. **先基础清理**：从 `trim_whitespace`、`collapse_spaces`、`remove_control_chars`、`remove_zero_width` 开始
-3. **Unicode 处理**：对国际化文本使用 `unicode_normalization` 和 `fullwidth_to_halfwidth`
-4. **HTML 处理**：富文本使用 `whitelist_html`，纯文本使用 `strip_html`
-5. **长度控制最后**：将 `visible_ratio_guard` 和 `truncate_length` 放在最后
-
-详细的参数信息和更多示例，请查看 [Pipeline 指南](PIPELINE_GUIDE.zh-CN.md)。
-
-## 预设配置
-
-### 级别性预设
-
-#### `safe` 预设
-默认预设，适合大多数普通文本输入框。包含基本的文本清洗功能。
-
-#### `strict` 预设
-更严格的过滤模式：
-- 不允许 emoji 字符
-- 转换所有标点为半角
-- 更高的可见字符比例要求 (0.8)
-- 较短的文本长度限制 (5000)
-
-### 功能特定预设（示例）
-
-#### `username` 预设
-适合用户名输入，更严格的规范化。
-
-#### `nickname` 预设
-适合用户昵称，支持 emoji 和中文标点符号。
-
-#### `rich_text` 预设
-适合富文本内容，保留安全的 HTML 标签。
-
-## 扩展功能
-
-### 注册自定义管道步骤
-
-```php
-use Overtrue\TextGuard\TextGuard;
-
-// 注册自定义步骤
-TextGuard::registerPipelineStep('custom_step', YourCustomPipeline::class);
-
-// 在预设中使用
-$clean = TextGuard::filter($dirty, 'custom', [
-    'custom_step' => ['option' => 'value']
-]);
-```
-
-### 获取可用步骤
-
-```php
-$availableSteps = TextGuard::getAvailableSteps();
-// 返回: ['trim_whitespace', 'collapse_spaces', 'remove_control_chars', ...]
-```
-
-### 创建自定义管道步骤
-
-```php
-use Overtrue\TextGuard\Pipeline\PipelineStep;
-
-class CustomStep implements PipelineStep
-{
-    public function __construct(protected array $options = []) {}
-
-    public function __invoke(string $text): string
-    {
-        // 你的自定义逻辑
-        return $text;
-    }
-}
-```
-
-### 构造函数配置
-
-现在所有 Pipeline 步骤都使用构造函数进行配置，更符合传统的 OOP 设计：
-
-```php
-// config/text-guard.php
-return [
-    'pipeline_map' => [
-        // 简化语法：直接使用类名
-        'trim_whitespace' => \Overtrue\TextGuard\Pipeline\TrimWhitespace::class,
-        'strip_html' => \Overtrue\TextGuard\Pipeline\StripHtml::class,
-    ],
-
-    'presets' => [
-        'safe' => [
-            // 布尔值配置：启用功能
-            'trim_whitespace' => true,
-
-            // 字符串配置：传递给构造函数
-            'unicode_normalization' => 'NFKC',
-
-            // 数组配置：传递给构造函数
-            'truncate_length' => ['max' => 100],
-        ],
-    ],
-];
-```
-
-### 配置传递机制
-
-系统会根据配置类型自动传递给构造函数：
-
-- `true` → 无参数构造函数 `new Class()`
-- `'NFKC'` → 单参数构造函数 `new Class('NFKC')`
-- `['max' => 100]` → 数组参数构造函数 `new Class(['max' => 100])`
-
-## 实际使用场景
-
-### 用户注册表单
-
-```php
-// 用户注册时清理昵称
-class RegisterRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('nickname')) {
-            $this->merge([
-                'nickname' => TextGuard::filter(
-                    (string)$this->input('nickname'),
-                    'username'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'nickname' => ['required', 'string', 'max:20', new Sanitized(0.9, 1)],
-            'email' => ['required', 'email'],
-        ];
-    }
-}
-
-// 处理结果：
-// 输入: "  ＵｓｅｒＮａｍｅ１２３！！！  "
-// 输出: "UserName123!!"
-```
-
-### 文章内容管理
-
-```php
-// 文章发布时清理内容
-class ArticleRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('content')) {
-            $this->merge([
-                'content' => TextGuard::filter(
-                    (string)$this->input('content'),
-                    'rich_text'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'title' => ['required', 'string', new Filtered('safe')],
-            'content' => ['required', 'string', new Sanitized(0.8, 10)],
-        ];
-    }
-}
-
-// 处理结果：
-// 输入: "<p>Hello <script>alert('xss')</script> World</p>"
-// 输出: "<p>Hello  World</p>"
-```
-
-### 评论系统
-
-```php
-// 评论提交时清理内容
-class CommentRequest extends FormRequest
-{
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('content')) {
-            $this->merge([
-                'content' => TextGuard::filter(
-                    (string)$this->input('content'),
-                    'safe'
-                ),
-            ]);
-        }
-    }
-
-    public function rules(): array
-    {
-        return [
-            'content' => ['required', 'string', 'max:500', new Sanitized(0.7, 1)],
-        ];
-    }
-}
-
-// 处理结果：
-// 输入: "  好文章！！！👍👍👍   "
-// 输出: "好文章！！👍👍👍"
-```
-
-### 搜索关键词处理
-
-```php
-// 搜索时清理关键词
-class SearchController extends Controller
-{
-    public function search(Request $request)
-    {
-        $keyword = TextGuard::filter($request->input('q', ''), 'safe');
-
-        if (empty($keyword)) {
-            return redirect()->back()->with('error', '请输入有效的搜索词');
-        }
-
-        $results = $this->searchService->search($keyword);
-
-        return view('search.results', compact('results', 'keyword'));
-    }
-}
-
-// 处理结果：
-// 输入: "  Laravel 框架  "
-// 输出: "Laravel 框架"
-```
-
-### 批量数据处理
-
-```php
-// 批量导入用户数据时清理
-class UserImportService
-{
-    public function importUsers(array $users): void
-    {
-        foreach ($users as $user) {
-            $cleanUser = [
-                'name' => TextGuard::filter($user['name'], 'safe'),
-                'email' => TextGuard::filter($user['email'], 'safe'),
-                'bio' => TextGuard::filter($user['bio'] ?? '', 'rich_text'),
-            ];
-
-            User::create($cleanUser);
-        }
-    }
-}
-```
-
-### 自定义管道步骤
-
-```php
-// 创建自定义的敏感词过滤步骤
-class SensitiveWordFilter implements PipelineStep
-{
-    public function __construct(protected array $sensitiveWords = []) {}
-
-    public function __invoke(string $text): string
-    {
-        foreach ($this->sensitiveWords as $word) {
-            $text = str_ireplace($word, str_repeat('*', mb_strlen($word)), $text);
-        }
-
-        return $text;
-    }
-}
-
-// 注册并使用
-TextGuard::registerPipelineStep('sensitive_filter', SensitiveWordFilter::class);
-
-$clean = TextGuard::filter($dirty, 'custom', [
-    'sensitive_filter' => ['sensitiveWords' => ['badword1', 'badword2']]
-]);
-```
-
-## 功能特性
-
-- 空白字符处理（trim、折叠空格）
-- 控制字符移除
-- 零宽字符移除
-- Unicode 规范化
-- 全角半角转换
-- 标点符号规范化
-- HTML 标签处理
-- 重复标点折叠
-- 可见度检查
-- 长度截断
-- 可扩展的管道架构
-- 运行时注册自定义步骤
-- Emoji 支持
-- 中文标点符号支持
-- 字符白名单过滤
-
-## 测试
-
-```bash
-composer test
-```
-
-## 代码质量
-
-本项目遵循严格的代码质量标准：
-
-```bash
-# 格式化代码
+~~~bash
+composer install
 composer fix
-
-# 运行测试
 composer test
-```
+~~~
 
-## 许可证
-
-MIT License
+MIT License。

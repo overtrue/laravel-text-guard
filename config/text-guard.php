@@ -7,6 +7,7 @@ use Overtrue\TextGuard\Pipeline\FullwidthToHalfwidth;
 use Overtrue\TextGuard\Pipeline\HtmlDecode;
 use Overtrue\TextGuard\Pipeline\NormalizePunctuations;
 use Overtrue\TextGuard\Pipeline\NormalizeUnicode;
+use Overtrue\TextGuard\Pipeline\RemoveBidiControls;
 use Overtrue\TextGuard\Pipeline\RemoveControlChars;
 use Overtrue\TextGuard\Pipeline\RemoveZeroWidth;
 use Overtrue\TextGuard\Pipeline\StripHtml;
@@ -34,8 +35,6 @@ return [
     'presets' => [
         // Strict mode: more restrictive filtering
         'strict' => [
-            'trim_whitespace' => true,
-            'collapse_spaces' => true,
             'remove_control_chars' => true,
             'remove_zero_width' => true,
             'unicode_normalization' => 'NFKC',
@@ -52,37 +51,30 @@ return [
                 'allow_emoji' => false, // Strict mode disallows emoji
                 'allow_chinese_punctuation' => true,
                 'allow_english_punctuation' => true,
-                'emoji_ranges' => [
-                    'emoticons' => false,
-                    'misc_symbols' => false,
-                    'transport_map' => false,
-                    'misc_symbols_2' => false,
-                    'dingbats' => false,
-                ],
             ],
             'visible_ratio_guard' => ['min_ratio' => 0.8],
+            'collapse_spaces' => true,
             'truncate_length' => ['max' => 5000],
+            'trim_whitespace' => true,
         ],
 
         // Plain text forms: nicknames, titles, comments, etc.
         'safe' => [
-            'trim_whitespace' => true,
-            'collapse_spaces' => true,
             'remove_control_chars' => true,
             'remove_zero_width' => true,
             'strip_html' => true,
             'visible_ratio_guard' => [
                 'min_ratio' => 0.6, // Visible character ratio
             ],
+            'collapse_spaces' => true,
             'truncate_length' => [
                 'max' => 5000, // Safety fallback
             ],
+            'trim_whitespace' => true,
         ],
 
         // Username: more strict
         'username' => [
-            'trim_whitespace' => true,
-            'collapse_spaces' => true,
             'remove_control_chars' => true,
             'remove_zero_width' => true,
             'unicode_normalization' => 'NFKC',
@@ -91,15 +83,15 @@ return [
             'strip_html' => true,
             'collapse_repeated_marks' => ['max_repeat' => 1, 'charset' => '_-.'],
             'visible_ratio_guard' => ['min_ratio' => 0.9],
+            'collapse_spaces' => true,
             'truncate_length' => ['max' => 50],
+            'trim_whitespace' => true,
         ],
 
         // Nickname: example preset with emoji support
         'nickname' => [
-            'trim_whitespace' => true,
-            'collapse_spaces' => true,
             'remove_control_chars' => true,
-            'remove_zero_width' => true,
+            'remove_zero_width' => ['preserve_joiners' => true],
             'unicode_normalization' => 'NFKC',
             'fullwidth_to_halfwidth' => [
                 'ascii' => true,
@@ -114,21 +106,14 @@ return [
                 'allow_emoji' => true,
                 'allow_chinese_punctuation' => true,
                 'allow_english_punctuation' => true,
-                'emoji_ranges' => [
-                    'emoticons' => true,
-                    'misc_symbols' => true,
-                    'transport_map' => true,
-                    'misc_symbols_2' => true,
-                    'dingbats' => true,
-                ],
             ],
-            'visible_ratio_guard' => ['min_ratio' => 0.7],
-            'truncate_length' => ['max' => 30],
+            'collapse_spaces' => true,
+            'truncate_length' => ['max' => 30, 'unit' => 'grapheme'],
+            'trim_whitespace' => true,
         ],
 
         // Rich text whitelist (example)
         'rich_text' => [
-            'trim_whitespace' => true,
             'remove_control_chars' => true,
             'remove_zero_width' => true,
             'unicode_normalization' => 'NFC',
@@ -139,6 +124,7 @@ return [
             ],
             'visible_ratio_guard' => ['min_ratio' => 0.5],
             'truncate_length' => ['max' => 20000],
+            'trim_whitespace' => true,
         ],
 
         // your custom preset
@@ -160,6 +146,7 @@ return [
         'trim_whitespace' => TrimWhitespace::class,
         'collapse_spaces' => CollapseSpaces::class,
         'remove_control_chars' => RemoveControlChars::class,
+        'remove_bidi_controls' => RemoveBidiControls::class,
         'remove_zero_width' => RemoveZeroWidth::class,
         'strip_html' => StripHtml::class,
         'html_decode' => HtmlDecode::class,
